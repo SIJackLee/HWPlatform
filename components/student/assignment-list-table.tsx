@@ -28,6 +28,9 @@ export function AssignmentListTable({ items }: { items: StudentAssignmentItem[] 
               <p className="font-medium">{item.title}</p>
               <AssignmentStatusBadge status={item.status} />
             </div>
+            <p className="text-sm">
+              유형: {item.question_type === "objective" ? "객관식" : item.question_type === "mixed" ? "혼합형" : "주관식"}
+            </p>
             <p className="text-sm text-muted-foreground">마감일: {formatDate(item.due_at)}</p>
             <div className="flex items-center justify-between">
               <p className="text-sm">피드백: {item.submission?.feedback_text ? "도착" : "-"}</p>
@@ -43,6 +46,7 @@ export function AssignmentListTable({ items }: { items: StudentAssignmentItem[] 
         <thead className="bg-muted/40 text-left">
           <tr>
             <th className="px-4 py-3 font-medium">제목</th>
+            <th className="px-4 py-3 font-medium">유형</th>
             <th className="px-4 py-3 font-medium">마감일</th>
             <th className="px-4 py-3 font-medium">상태</th>
             <th className="px-4 py-3 font-medium">피드백</th>
@@ -53,6 +57,9 @@ export function AssignmentListTable({ items }: { items: StudentAssignmentItem[] 
           {items.map((item) => (
             <tr key={item.id} className="border-t">
               <td className="px-4 py-3">{item.title}</td>
+              <td className="px-4 py-3">
+                {item.question_type === "objective" ? "객관식" : item.question_type === "mixed" ? "혼합형" : "주관식"}
+              </td>
               <td className="px-4 py-3">{formatDate(item.due_at)}</td>
               <td className="px-4 py-3">
                 <AssignmentStatusBadge status={item.status} />

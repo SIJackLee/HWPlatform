@@ -1,0 +1,3 @@
+-- Deprecated migration retained for history compatibility.
+-- Superseded by 004_switch_to_custom_auth_sessions.sql.
+-- No-op to avoid reintroducing Supabase Auth signup trigger.

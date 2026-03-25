@@ -9,6 +9,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ title, navItems, actions, children }: AppShellProps) {
+  const homeHref = navItems[0]?.href ?? "/";
   const navLinkClass =
     "inline-flex h-8 items-center justify-start rounded-lg px-2.5 text-sm font-medium hover:bg-muted hover:text-foreground";
   const mobileNavLinkClass =
@@ -19,7 +20,9 @@ export function AppShell({ title, navItems, actions, children }: AppShellProps) 
       <header className="border-b bg-background">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">{title}</h1>
+            <Link href={homeHref} className="text-lg font-semibold hover:underline" aria-label="메인으로 이동">
+              {title}
+            </Link>
           </div>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
