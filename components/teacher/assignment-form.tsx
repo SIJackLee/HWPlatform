@@ -127,6 +127,9 @@ export function AssignmentForm({
   const [librarySelectedFileLabel, setLibrarySelectedFileLabel] = useState<string>("");
   const [pickerTargetId, setPickerTargetId] = useState<string | null>(null);
   const [pickerOrder, setPickerOrder] = useState<string[]>([]);
+  const [pendingScrollQuestionId, setPendingScrollQuestionId] = useState<string | null>(null);
+  const [pendingFocusQuestionId, setPendingFocusQuestionId] = useState<string | null>(null);
+  const questionPromptRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   const previewById = useMemo(() => new Map(libraryAssets.map((a) => [a.id, a.previewUrl])), [libraryAssets]);
 
@@ -154,6 +157,27 @@ export function AssignmentForm({
     const done = mixedQuestions.filter((q) => q.prompt.trim().length > 0).length;
     return `${done}/${mixedQuestions.length} 문항 입력`;
   }, [mixedQuestions]);
+  const remainingCount = useMemo(
+    () => mixedQuestions.filter((q) => q.prompt.trim().length === 0).length,
+    [mixedQuestions],
+  );
+  const firstIncompleteQuestion = useMemo(
+    () => mixedQuestions.find((q) => q.prompt.trim().length === 0),
+    [mixedQuestions],
+  );
+
+  function isQuestionComplete(question: MixedQuestionDraft): boolean {
+    if (!question.prompt.trim()) return false;
+    if (question.type !== "objective") return true;
+    const validOptions = question.options.filter((option) => option.trim().length > 0);
+    return validOptions.length >= 2 && question.correctOptionIndexes.length >= 1;
+  }
+
+  function moveToQuestionEditor(questionId: string) {
+    updateMixedQuestion(questionId, (prev) => ({ ...prev, collapsed: false }));
+    setPendingScrollQuestionId(questionId);
+    setPendingFocusQuestionId(questionId);
+  }
 
   async function handleLibraryUploadClick() {
     setLibraryError("");
@@ -273,6 +297,22 @@ export function AssignmentForm({
   }, [pickerTargetId]);
 
   useEffect(() => {
+    if (!pendingScrollQuestionId) return;
+    const card = document.getElementById(`editor-question-${pendingScrollQuestionId}`);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setPendingScrollQuestionId(null);
+  }, [pendingScrollQuestionId, mixedQuestions]);
+
+  useEffect(() => {
+    if (!pendingFocusQuestionId) return;
+    const target = questionPromptRefs.current[pendingFocusQuestionId];
+    if (target) target.focus();
+    setPendingFocusQuestionId(null);
+  }, [pendingFocusQuestionId, mixedQuestions]);
+
+  useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       const form = formRef.current;
       const titleEl = form?.elements.namedItem("title") as HTMLInputElement | undefined;
@@ -355,6 +395,16 @@ export function AssignmentForm({
           혼합형 (주관식 + 객관식)
         </div>
         <p className="text-xs text-muted-foreground">{completionText}</p>
+        <p className="text-xs text-muted-foreground">남은 문항: {remainingCount}개</p>
+        {firstIncompleteQuestion ? (
+          <button
+            type="button"
+            className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs hover:bg-muted"
+            onClick={() => moveToQuestionEditor(firstIncompleteQuestion.id)}
+          >
+            첫 미완료 문항으로 이동
+          </button>
+        ) : null}
         {draftSavedAt ? (
           <p className="text-xs text-muted-foreground">
             마지막 임시저장: {new Date(draftSavedAt).toLocaleString("ko-KR")}
@@ -488,11 +538,12 @@ export function AssignmentForm({
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm"
-              onClick={() =>
+              onClick={() => {
+                const newId = crypto.randomUUID();
                 setMixedQuestions((prev) => [
                   ...prev,
                   {
-                    id: crypto.randomUUID(),
+                    id: newId,
                     type: "subjective",
                     prompt: "",
                     options: ["", ""],
@@ -500,8 +551,9 @@ export function AssignmentForm({
                     collapsed: true,
                     libraryAssetIds: [],
                   },
-                ])
-              }
+                ]);
+                setPendingScrollQuestionId(newId);
+              }}
             >
               문항 추가
             </button>
@@ -509,19 +561,32 @@ export function AssignmentForm({
         </div>
         <div className="space-y-3">
           {mixedQuestions.map((question, idx) => (
-            <div key={question.id} className="space-y-2 rounded-md border p-3">
+            <div id={`editor-question-${question.id}`} key={question.id} className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <button
                   type="button"
                   className="inline-flex items-center justify-center rounded-md border bg-background px-2 py-1 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  onClick={() =>
-                    updateMixedQuestion(question.id, (prev) => ({ ...prev, collapsed: !prev.collapsed }))
-                  }
+                  onClick={() => {
+                    const nextCollapsed = !question.collapsed;
+                    updateMixedQuestion(question.id, (prev) => ({ ...prev, collapsed: nextCollapsed }));
+                    if (!nextCollapsed) {
+                      setPendingFocusQuestionId(question.id);
+                    }
+                  }}
                 >
                   Q{idx + 1} / {question.type === "objective" ? "객관식" : "주관식"}{" "}
                   {question.collapsed ? "(펼치기)" : "(접기)"}
                 </button>
                 <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs ${
+                      isQuestionComplete(question)
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-amber-300 bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {isQuestionComplete(question) ? "완료" : "미완료"}
+                  </span>
                   <button
                     type="button"
                     className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs disabled:opacity-40 disabled:pointer-events-none"
@@ -595,6 +660,9 @@ export function AssignmentForm({
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="문항 내용을 입력하세요."
                     value={question.prompt}
+                    ref={(el) => {
+                      questionPromptRefs.current[question.id] = el;
+                    }}
                     onChange={(event) =>
                       updateMixedQuestion(question.id, (prev) => ({ ...prev, prompt: event.target.value }))
                     }
