@@ -43,7 +43,7 @@ export function QuestionImages({ imageUrlJson }: { imageUrlJson: string | null |
               src={url}
               alt={`문항 이미지 ${idx + 1}`}
               loading="lazy"
-              className="max-h-[min(70vh,28rem)] w-full rounded-md object-contain"
+              className="max-h-[min(45vh,22rem)] sm:max-h-[min(70vh,28rem)] w-full rounded-md object-contain"
             />
           </button>
         ))}
