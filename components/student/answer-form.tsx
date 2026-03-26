@@ -115,9 +115,11 @@ export function AnswerForm({
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
             <p className="font-medium">진행 상태: {completedCount}/{mixedQuestions.length} 완료</p>
             {firstIncompleteQuestion ? (
-              <button
+              <Button
                 type="button"
-                className="mt-1 text-xs text-primary underline-offset-4 hover:underline"
+                variant="outline"
+                size="xs"
+                className="mt-1"
                 onClick={() => {
                   const el = document.getElementById(`mixed-question-${firstIncompleteQuestion.id}`);
                   el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -126,7 +128,7 @@ export function AnswerForm({
                 }}
               >
                 미작성 문항으로 이동
-              </button>
+              </Button>
             ) : null}
           </div>
           {mixedQuestions.map((question) => (

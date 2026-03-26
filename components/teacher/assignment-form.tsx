@@ -481,7 +481,7 @@ export function AssignmentForm({
               <div className="flex items-center justify-between">
                 <button
                   type="button"
-                  className="text-sm font-medium"
+                  className="inline-flex items-center justify-center rounded-md border bg-background px-2 py-1 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   onClick={() =>
                     updateMixedQuestion(question.id, (prev) => ({ ...prev, collapsed: !prev.collapsed }))
                   }
@@ -521,7 +521,7 @@ export function AssignmentForm({
                   {mixedQuestions.length > 1 ? (
                     <button
                       type="button"
-                      className="text-xs text-destructive"
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
                       onClick={() => setMixedQuestions((prev) => prev.filter((item) => item.id !== question.id))}
                     >
                       삭제
