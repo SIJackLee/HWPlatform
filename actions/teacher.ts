@@ -7,6 +7,8 @@ import { ASSIGNMENT_QUESTION_IMAGE_BUCKET } from "@/lib/assignment-question-imag
 import { getAuthState } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
+const LIBRARY_FILE_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
+
 function friendlyTeacherImageTableError(raw: string): string {
   if (
     raw.includes("teacher_image_assets") ||
@@ -333,6 +335,9 @@ export async function uploadTeacherLibraryImage(formData: FormData) {
   if (typeof f.size !== "number" || f.size <= 0) {
     return { ok: false as const, error: "파일을 선택해 주세요." };
   }
+  if (f.size > LIBRARY_FILE_SIZE_LIMIT_BYTES) {
+    return { ok: false as const, error: "이미지 용량이 50MB를 초과했습니다. 용량을 줄여 다시 시도해 주세요." };
+  }
 
   const supabase = createServerSupabaseClient();
   const bucket = ASSIGNMENT_QUESTION_IMAGE_BUCKET;
@@ -346,6 +351,10 @@ export async function uploadTeacherLibraryImage(formData: FormData) {
     upsert: false,
   });
   if (uploadRes.error) {
+    const message = uploadRes.error.message.toLowerCase();
+    if (message.includes("maximum allowed size") || message.includes("too large") || message.includes("payload")) {
+      return { ok: false as const, error: "이미지 용량이 제한을 초과했습니다. 용량을 줄여 다시 시도해 주세요." };
+    }
     return { ok: false as const, error: uploadRes.error.message };
   }
 

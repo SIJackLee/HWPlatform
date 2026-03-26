@@ -27,6 +27,13 @@ interface MixedQuestionDraft {
 }
 
 const DRAFT_STORAGE_KEY = "teacher-assignment-draft";
+const LIBRARY_FILE_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
+
+function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0MB";
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(mb >= 10 ? 0 : 1)}MB`;
+}
 
 function formatDatetimeLocalValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -117,6 +124,7 @@ export function AssignmentForm({
   const [libraryError, setLibraryError] = useState<string>("");
   const [libraryUploading, setLibraryUploading] = useState(false);
   const [librarySuccess, setLibrarySuccess] = useState<string | null>(null);
+  const [librarySelectedFileLabel, setLibrarySelectedFileLabel] = useState<string>("");
   const [pickerTargetId, setPickerTargetId] = useState<string | null>(null);
   const [pickerOrder, setPickerOrder] = useState<string[]>([]);
 
@@ -156,19 +164,30 @@ export function AssignmentForm({
       setLibraryError("파일을 선택해 주세요.");
       return;
     }
+    if (file.size > LIBRARY_FILE_SIZE_LIMIT_BYTES) {
+      setLibraryError(
+        `이미지 용량이 너무 큽니다. 현재 ${formatFileSize(file.size)} / 최대 ${formatFileSize(
+          LIBRARY_FILE_SIZE_LIMIT_BYTES,
+        )}`,
+      );
+      return;
+    }
     setLibraryUploading(true);
     try {
       const fd = new FormData();
       fd.set("file", file);
       const result = await uploadTeacherLibraryImage(fd);
       if (!result.ok) {
-        setLibraryError(result.error);
+        setLibraryError(`${file.name} 업로드 실패: ${result.error}`);
         return;
       }
       if (input) input.value = "";
+      setLibrarySelectedFileLabel("");
       setLibrarySuccess("라이브러리에 추가되었습니다.");
       window.setTimeout(() => setLibrarySuccess(null), 4000);
       router.refresh();
+    } catch {
+      setLibraryError("업로드 중 네트워크 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setLibraryUploading(false);
     }
@@ -388,6 +407,14 @@ export function AssignmentForm({
             name="file"
             accept="image/*"
             className="max-w-full text-sm"
+            onChange={(e) => {
+              const selected = e.currentTarget.files?.[0];
+              if (!selected) {
+                setLibrarySelectedFileLabel("");
+                return;
+              }
+              setLibrarySelectedFileLabel(`${selected.name} (${formatFileSize(selected.size)})`);
+            }}
           />
           <Button
             type="button"
@@ -400,7 +427,12 @@ export function AssignmentForm({
             {libraryUploading ? "업로드 중…" : "라이브러리에 추가"}
           </Button>
         </div>
-        <p className="text-[11px] text-muted-foreground">이미지 파일을 이 영역에 끌어다 놓을 수도 있습니다.</p>
+        <p className="text-[11px] text-muted-foreground">
+          이미지 파일을 이 영역에 끌어다 놓을 수도 있습니다. (최대 {formatFileSize(LIBRARY_FILE_SIZE_LIMIT_BYTES)})
+        </p>
+        {librarySelectedFileLabel ? (
+          <p className="text-xs text-muted-foreground">선택한 파일: {librarySelectedFileLabel}</p>
+        ) : null}
         {librarySuccess ? (
           <p className="text-sm text-emerald-700 dark:text-emerald-400" role="status">
             {librarySuccess}
