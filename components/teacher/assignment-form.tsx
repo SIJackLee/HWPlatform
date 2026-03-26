@@ -125,6 +125,8 @@ export function AssignmentForm({
   const [libraryUploading, setLibraryUploading] = useState(false);
   const [librarySuccess, setLibrarySuccess] = useState<string | null>(null);
   const [librarySelectedFileLabel, setLibrarySelectedFileLabel] = useState<string>("");
+  const [showLibraryAssets, setShowLibraryAssets] = useState(true);
+  const [showGuideDetails, setShowGuideDetails] = useState(false);
   const [pickerTargetId, setPickerTargetId] = useState<string | null>(null);
   const [pickerOrder, setPickerOrder] = useState<string[]>([]);
   const [pendingScrollQuestionId, setPendingScrollQuestionId] = useState<string | null>(null);
@@ -163,6 +165,10 @@ export function AssignmentForm({
   );
   const firstIncompleteQuestion = useMemo(
     () => mixedQuestions.find((q) => q.prompt.trim().length === 0),
+    [mixedQuestions],
+  );
+  const incompleteQuestionsCount = useMemo(
+    () => mixedQuestions.filter((q) => !isQuestionComplete(q)).length,
     [mixedQuestions],
   );
 
@@ -369,66 +375,83 @@ export function AssignmentForm({
 
       <div className="rounded-md border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
         <p className="font-medium text-foreground">작성 전 확인</p>
-        <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>제목·설명·마감일·대상 학생을 모두 지정했는지 확인하세요.</li>
-          <li>문항 이미지는 라이브러리 순서대로 복사되며, 썸네일 옆 화살표로 순서를 바꿀 수 있습니다.</li>
-          <li>임시저장은 이 브라우저에만 저장됩니다.</li>
-        </ul>
+        <p className="mt-1">제목/설명/마감일/대상 학생을 입력한 뒤 문항을 작성해 주세요.</p>
+        <button
+          type="button"
+          className="mt-2 text-xs underline underline-offset-2"
+          onClick={() => setShowGuideDetails((prev) => !prev)}
+        >
+          {showGuideDetails ? "안내 접기" : "자세히 보기"}
+        </button>
+        {showGuideDetails ? (
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            <li>문항 이미지는 라이브러리 순서대로 복사되며, 썸네일 옆 화살표로 순서를 바꿀 수 있습니다.</li>
+            <li>임시저장은 이 브라우저에만 저장됩니다.</li>
+          </ul>
+        ) : null}
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="title" className="text-sm font-medium">
-          제목
-        </label>
-        <input
-          id="title"
-          name="title"
-          required
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="예: 영어 단어 암기 숙제"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-medium">문항 유형</p>
-        <div className="inline-flex h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-sm font-medium">
-          혼합형 (주관식 + 객관식)
+      <section className="space-y-4 rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">1. 기본 정보</h2>
         </div>
-        <p className="text-xs text-muted-foreground">{completionText}</p>
-        <p className="text-xs text-muted-foreground">남은 문항: {remainingCount}개</p>
-        {firstIncompleteQuestion ? (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs hover:bg-muted"
-            onClick={() => moveToQuestionEditor(firstIncompleteQuestion.id)}
-          >
-            첫 미완료 문항으로 이동
-          </button>
-        ) : null}
-        {draftSavedAt ? (
-          <p className="text-xs text-muted-foreground">
-            마지막 임시저장: {new Date(draftSavedAt).toLocaleString("ko-KR")}
-          </p>
-        ) : null}
-      </div>
+        <div className="space-y-2">
+          <label htmlFor="title" className="text-sm font-medium">
+            제목
+          </label>
+          <input
+            id="title"
+            name="title"
+            required
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="예: 영어 단어 암기 숙제"
+          />
+        </div>
 
-      <div className="space-y-2">
-        <label htmlFor="description" className="text-sm font-medium">
-          설명
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          required
-          rows={6}
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="숙제 지시사항을 입력하세요."
-        />
-      </div>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">문항 유형</p>
+          <div className="inline-flex h-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-3 text-sm font-medium">
+            혼합형 (주관식 + 객관식)
+          </div>
+          <p className="text-xs text-muted-foreground">{completionText}</p>
+          <p className="text-xs text-muted-foreground">남은 문항: {remainingCount}개</p>
+          {firstIncompleteQuestion ? (
+            <button
+              type="button"
+              className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs hover:bg-muted"
+              onClick={() => moveToQuestionEditor(firstIncompleteQuestion.id)}
+            >
+              첫 미완료 문항으로 이동
+            </button>
+          ) : null}
+          {draftSavedAt ? (
+            <p className="text-xs text-muted-foreground">
+              마지막 임시저장: {new Date(draftSavedAt).toLocaleString("ko-KR")}
+            </p>
+          ) : null}
+        </div>
 
-      <div className="space-y-3 rounded-lg border p-3">
-        <div>
-          <p className="text-sm font-medium">이미지 라이브러리</p>
+        <div className="space-y-2">
+          <label htmlFor="description" className="text-sm font-medium">
+            설명
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            rows={6}
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="숙제 지시사항을 입력하세요."
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-base font-semibold">3. 이미지</p>
+            <p className="text-sm font-medium">이미지 라이브러리</p>
+          </div>
           <p className="text-xs text-muted-foreground">
             미리 올려 두고 아래 각 문항에서 선택해 넣을 수 있습니다. 숙제 저장 시 문항별로 복사되어 저장됩니다.
           </p>
@@ -491,9 +514,18 @@ export function AssignmentForm({
         {libraryError ? (
           <p className="text-sm text-destructive">{libraryError}</p>
         ) : null}
+        {libraryAssets.length > 0 ? (
+          <button
+            type="button"
+            className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs"
+            onClick={() => setShowLibraryAssets((prev) => !prev)}
+          >
+            {showLibraryAssets ? `라이브러리 접기 (${libraryAssets.length})` : `라이브러리 보기 (${libraryAssets.length})`}
+          </button>
+        ) : null}
         {libraryAssets.length === 0 ? (
           <p className="text-xs text-muted-foreground">아직 라이브러리에 이미지가 없습니다.</p>
-        ) : (
+        ) : showLibraryAssets ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {libraryAssets.map((asset) => (
               <div key={asset.id} className="relative overflow-hidden rounded-md border bg-muted/30">
@@ -514,27 +546,37 @@ export function AssignmentForm({
               </div>
             ))}
           </div>
-        )}
-      </div>
+        ) : null}
+      </section>
 
-      <div className="space-y-3 rounded-lg border p-3">
+      <section className="space-y-3 rounded-lg border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium">혼합형 문항 구성</p>
+          <div className="flex items-center gap-2">
+            <p className="text-base font-semibold">2. 문항 구성</p>
+            <span className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-amber-50 px-2 text-xs text-amber-700">
+              미완료 {incompleteQuestionsCount}
+            </span>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-md border px-2 text-xs"
-              onClick={() => setMixedQuestions((prev) => prev.map((q) => ({ ...q, collapsed: false })))}
-            >
-              모두 펼치기
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-9 items-center justify-center rounded-md border px-2 text-xs"
-              onClick={() => setMixedQuestions((prev) => prev.map((q) => ({ ...q, collapsed: true })))}
-            >
-              모두 접기
-            </button>
+            <details className="rounded-md border bg-background">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs text-muted-foreground">보기 옵션</summary>
+              <div className="flex gap-2 border-t p-2">
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs"
+                  onClick={() => setMixedQuestions((prev) => prev.map((q) => ({ ...q, collapsed: false })))}
+                >
+                  모두 펼치기
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs"
+                  onClick={() => setMixedQuestions((prev) => prev.map((q) => ({ ...q, collapsed: true })))}
+                >
+                  모두 접기
+                </button>
+              </div>
+            </details>
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm"
@@ -587,43 +629,50 @@ export function AssignmentForm({
                   >
                     {isQuestionComplete(question) ? "완료" : "미완료"}
                   </span>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs disabled:opacity-40 disabled:pointer-events-none"
-                    disabled={idx === 0}
-                    onClick={() =>
-                      setMixedQuestions((prev) => {
-                        const copied = [...prev];
-                        [copied[idx - 1], copied[idx]] = [copied[idx], copied[idx - 1]];
-                        return copied;
-                      })
-                    }
-                  >
-                    위로
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs disabled:opacity-40 disabled:pointer-events-none"
-                    disabled={idx === mixedQuestions.length - 1}
-                    onClick={() =>
-                      setMixedQuestions((prev) => {
-                        const copied = [...prev];
-                        [copied[idx + 1], copied[idx]] = [copied[idx], copied[idx + 1]];
-                        return copied;
-                      })
-                    }
-                  >
-                    아래로
-                  </button>
-                  {mixedQuestions.length > 1 ? (
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
-                      onClick={() => setMixedQuestions((prev) => prev.filter((item) => item.id !== question.id))}
-                    >
-                      삭제
-                    </button>
-                  ) : null}
+                  <details className="relative">
+                    <summary className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border px-2 text-xs">
+                      작업
+                    </summary>
+                    <div className="absolute right-0 z-10 mt-1 flex min-w-32 flex-col gap-1 rounded-md border bg-background p-1 shadow">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-start rounded-md px-2 text-xs hover:bg-muted disabled:opacity-40"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          setMixedQuestions((prev) => {
+                            const copied = [...prev];
+                            [copied[idx - 1], copied[idx]] = [copied[idx], copied[idx - 1]];
+                            return copied;
+                          })
+                        }
+                      >
+                        위로 이동
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center justify-start rounded-md px-2 text-xs hover:bg-muted disabled:opacity-40"
+                        disabled={idx === mixedQuestions.length - 1}
+                        onClick={() =>
+                          setMixedQuestions((prev) => {
+                            const copied = [...prev];
+                            [copied[idx + 1], copied[idx]] = [copied[idx], copied[idx + 1]];
+                            return copied;
+                          })
+                        }
+                      >
+                        아래로 이동
+                      </button>
+                      {mixedQuestions.length > 1 ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 items-center justify-start rounded-md px-2 text-xs text-destructive hover:bg-destructive/10"
+                          onClick={() => setMixedQuestions((prev) => prev.filter((item) => item.id !== question.id))}
+                        >
+                          문항 삭제
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
                 </div>
               </div>
               {question.collapsed ? null : (
@@ -789,57 +838,60 @@ export function AssignmentForm({
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label htmlFor="dueAt" className="text-sm font-medium">
-            마감일
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-md border px-2 py-1 text-xs"
-              onClick={() => setDuePreset("tomorrow")}
-            >
-              내일 같은 시각
-            </button>
-            <button
-              type="button"
-              className="rounded-md border px-2 py-1 text-xs"
-              onClick={() => setDuePreset("week")}
-            >
-              일주일 후 같은 시각
-            </button>
+      <section className="space-y-4 rounded-lg border p-4">
+        <h2 className="text-base font-semibold">4. 일정 및 대상</h2>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor="dueAt" className="text-sm font-medium">
+              마감일
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-2 py-1 text-xs"
+                onClick={() => setDuePreset("tomorrow")}
+              >
+                내일 같은 시각
+              </button>
+              <button
+                type="button"
+                className="rounded-md border px-2 py-1 text-xs"
+                onClick={() => setDuePreset("week")}
+              >
+                일주일 후 같은 시각
+              </button>
+            </div>
           </div>
+          <input
+            ref={dueAtInputRef}
+            id="dueAt"
+            name="dueAt"
+            type="datetime-local"
+            required
+            className="w-full rounded-md border bg-background px-3 py-2 text-base md:text-sm"
+          />
         </div>
-        <input
-          ref={dueAtInputRef}
-          id="dueAt"
-          name="dueAt"
-          type="datetime-local"
-          required
-          className="w-full rounded-md border bg-background px-3 py-2 text-base md:text-sm"
-        />
-      </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium">대상 학생 선택 (최소 1명)</p>
-        {students.length === 0 ? (
-          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            등록된 student 계정이 없습니다. 먼저 student 계정을 생성해 주세요.
-          </p>
-        ) : (
-          <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-3">
-            {students.map((student) => (
-              <label key={student.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="studentIds" value={student.id} className="h-4 w-4" />
-                <span>{student.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">대상 학생 선택 (최소 1명)</p>
+          {students.length === 0 ? (
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              등록된 student 계정이 없습니다. 먼저 student 계정을 생성해 주세요.
+            </p>
+          ) : (
+            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-3">
+              {students.map((student) => (
+                <label key={student.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="studentIds" value={student.id} className="h-4 w-4" />
+                  <span>{student.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {clientError ? (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -852,8 +904,9 @@ export function AssignmentForm({
           {errorMessage}
         </p>
       ) : null}
-      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-30 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:static md:border-none md:bg-transparent md:px-0 md:pt-0 md:pb-0">
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-30 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:static md:rounded-lg md:border md:bg-transparent md:px-3 md:pt-3 md:pb-3">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-2">
+          <p className="hidden flex-1 text-sm font-medium md:block">5. 저장 및 제출</p>
           <button
             type="button"
             className="inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-medium"
