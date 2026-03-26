@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/components/common/page-header";
+import { QuestionImages } from "@/components/common/question-images";
 import { SubmissionTable } from "@/components/teacher/submission-table";
 import { getAuthState } from "@/lib/auth/session";
 import { getTeacherAssignmentDetail } from "@/lib/teacher/queries";
@@ -17,8 +18,16 @@ export default async function TeacherAssignmentDetailPage({
     throw new Error("권한이 없는 접근입니다.");
   }
 
-  const { assignment, submissions, targets, targetCount, submittedCount, notSubmittedCount, notSubmittedTargets } =
-    await getTeacherAssignmentDetail(assignmentId, user.id);
+  const {
+    assignment,
+    submissions,
+    targets,
+    targetCount,
+    submittedCount,
+    notSubmittedCount,
+    notSubmittedTargets,
+    mixedQuestions,
+  } = await getTeacherAssignmentDetail(assignmentId, user.id);
 
   const outlineLinkClass =
     "inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted md:h-8 md:px-2.5";
@@ -48,6 +57,22 @@ export default async function TeacherAssignmentDetailPage({
           </p>
         </div>
       </div>
+
+      {assignment.question_type === "mixed" && (mixedQuestions?.length ?? 0) > 0 ? (
+        <div className="rounded-lg border p-4">
+          <h3 className="mb-3 text-base font-medium">문항 (미리보기)</h3>
+          <ul className="space-y-4">
+            {mixedQuestions!.map((question) => (
+              <li key={question.id} className="space-y-2 rounded-md border p-3">
+                <p className="text-sm font-medium">
+                  {question.sort_order}. {question.prompt}
+                </p>
+                <QuestionImages imageUrlJson={question.image_url} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="rounded-lg border p-4">
         <h3 className="mb-3 text-base font-medium">대상 학생 목록</h3>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/components/common/page-header";
+import { QuestionImages } from "@/components/common/question-images";
 import { FeedbackForm } from "@/components/teacher/feedback-form";
 import { getAuthState } from "@/lib/auth/session";
 import { getTeacherSubmissionDetail } from "@/lib/teacher/queries";
@@ -61,6 +62,7 @@ export default async function TeacherSubmissionDetailPage({
                 <p className="text-sm font-medium">
                   {question.sort_order}. {question.prompt}
                 </p>
+                <QuestionImages imageUrlJson={question.image_url} />
                 {question.question_type === "objective" ? (
                   <div className="space-y-1 text-sm">
                     {question.options.map((option) => {

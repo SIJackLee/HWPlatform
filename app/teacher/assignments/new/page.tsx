@@ -1,5 +1,6 @@
 import { AssignmentForm } from "@/components/teacher/assignment-form";
 import { PageHeader } from "@/components/common/page-header";
+import { getTeacherImageLibraryForForm } from "@/lib/teacher/library-queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getAuthState } from "@/lib/auth/session";
 
@@ -29,11 +30,17 @@ export default async function TeacherAssignmentNewPage({
     throw new Error("학생 목록을 불러오지 못했습니다.");
   }
 
+  const libraryAssets = await getTeacherImageLibraryForForm(user.id);
+
   return (
     <section className="space-y-4">
       <PageHeader title="숙제 등록" description="혼합형(주관식/객관식) 문항을 구성하고 마감일, 대상 학생과 함께 숙제를 등록합니다." />
       <div className="max-w-2xl rounded-lg border p-4">
-        <AssignmentForm errorMessage={params.error} students={studentsResult.data ?? []} />
+        <AssignmentForm
+          errorMessage={params.error}
+          students={studentsResult.data ?? []}
+          libraryAssets={libraryAssets}
+        />
       </div>
     </section>
   );

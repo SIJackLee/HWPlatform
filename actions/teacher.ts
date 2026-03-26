@@ -3,8 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { ASSIGNMENT_QUESTION_IMAGE_BUCKET } from "@/lib/assignment-question-images";
 import { getAuthState } from "@/lib/auth/session";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+function friendlyTeacherImageTableError(raw: string): string {
+  if (
+    raw.includes("teacher_image_assets") ||
+    raw.toLowerCase().includes("schema cache") ||
+    raw.includes("Could not find the table")
+  ) {
+    return "DB에 이미지 라이브러리 테이블이 없습니다. Supabase → SQL → 아래 파일 내용을 한 번 실행한 뒤 다시 시도해 주세요. (프로젝트의 sql/20250326_teacher_image_assets.sql)";
+  }
+  return raw;
+}
 
 export async function createAssignment(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
@@ -20,11 +32,24 @@ export async function createAssignment(formData: FormData) {
   if (!title || !description || !dueAt || studentIds.length === 0) {
     redirect("/teacher/assignments/new?error=모든 필드를 입력해 주세요.");
   }
+
+  const dueDate = new Date(dueAt);
+  if (Number.isNaN(dueDate.getTime())) {
+    redirect("/teacher/assignments/new?error=마감일 형식이 올바르지 않습니다.");
+  }
+
+  // DB 체크: due_at > created_at
+  // datetime-local은 초 단위가 없어서 "현재 분"을 선택하면 due_at이 created_at보다 과거/동일로 해석될 수 있어,
+  // 너무 가까운 값이면 안전하게 +60초 보정합니다.
+  const nowMs = Date.now();
+  const safeDueDateMs = dueDate.getTime() <= nowMs + 5000 ? nowMs + 60_000 : dueDate.getTime();
+  const safeDueIso = new Date(safeDueDateMs).toISOString();
   type MixedQuestionInput = {
     type: "subjective" | "objective";
     prompt: string;
     sort_order: number;
     options: Array<{ option_text: string; is_correct: boolean; sort_order: number }>;
+    library_asset_ids?: string[];
   };
 
   let mixedQuestions: MixedQuestionInput[] = [];
@@ -104,7 +129,7 @@ export async function createAssignment(formData: FormData) {
       title,
       description,
       question_type: questionType,
-      due_at: new Date(dueAt).toISOString(),
+    due_at: safeDueIso,
     }).select("id").single();
 
   if (error || !data) {
@@ -161,6 +186,104 @@ export async function createAssignment(formData: FormData) {
     questionsInsert.data.map((row) => [row.sort_order, row.id]),
   );
 
+  // Upload optional per-question images → assignments/.../questions/... only (copy policy; see lib/assignment-question-images.ts).
+  // assignment_questions.image_url: nullable text, JSON array string of public URLs for those objects.
+  const imageBucketName = ASSIGNMENT_QUESTION_IMAGE_BUCKET;
+  for (const [questionIndex, questionInput] of mixedQuestions.entries()) {
+    const sortOrder = questionIndex + 1;
+    const questionId = questionIdBySort.get(sortOrder);
+    if (!questionId) continue;
+
+    const fileFieldName = `questionImageFiles_${questionIndex}`;
+    const files = formData
+      .getAll(fileFieldName)
+      .filter((f): f is File => {
+        // Next.js server actions에서 파일이 들어오는 형태는 환경에 따라 다를 수 있어, File-like만 통과시킵니다.
+        if (!f) return false;
+        const candidate = f as unknown as { arrayBuffer?: unknown; size?: unknown };
+        if (typeof candidate.arrayBuffer !== "function") return false;
+        if (typeof candidate.size !== "number" || candidate.size <= 0) return false;
+        return true;
+      });
+
+    const libraryIds = (questionInput.library_asset_ids ?? []).filter((id) => typeof id === "string" && id.length > 0);
+    let libraryRows: Array<{ id: string; storage_path: string }> = [];
+    if (libraryIds.length > 0) {
+      const libResult = (await supabase
+        .from("teacher_image_assets")
+        .select("id, storage_path")
+        .filter("teacher_id", "eq", user.id)
+        .in("id", libraryIds)) as unknown as {
+        data: Array<{ id: string; storage_path: string }> | null;
+        error: { message: string } | null;
+      };
+      if (libResult.error) {
+        redirect(`/teacher/assignments/new?error=${encodeURIComponent(libResult.error.message)}`);
+      }
+      libraryRows = libResult.data ?? [];
+      if (libraryRows.length !== libraryIds.length) {
+        redirect(
+          `/teacher/assignments/new?error=${encodeURIComponent("이미지 라이브러리 항목을 찾을 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.")}`,
+        );
+      }
+    }
+
+    const pathById = new Map(libraryRows.map((r) => [r.id, r.storage_path]));
+    const imageUrls: string[] = [];
+
+    for (const assetId of libraryIds) {
+      const sourcePath = pathById.get(assetId);
+      if (!sourcePath) {
+        redirect(
+          `/teacher/assignments/new?error=${encodeURIComponent("이미지 라이브러리 항목을 찾을 수 없습니다.")}`,
+        );
+      }
+      const sourceTail = sourcePath.includes("/") ? sourcePath.split("/").pop() ?? sourcePath : sourcePath;
+      const extFromSource = sourceTail.includes(".") ? sourceTail.split(".").pop() : undefined;
+      const safeExt = extFromSource ? extFromSource.toLowerCase().replace(/[^a-z0-9]+/g, "") : undefined;
+      const destPath = `assignments/${data.id}/questions/${questionId}/${crypto.randomUUID()}${safeExt ? `.${safeExt}` : ""}`;
+
+      const copyRes = await supabase.storage.from(imageBucketName).copy(sourcePath, destPath);
+      if (copyRes.error) {
+        redirect(`/teacher/assignments/new?error=${encodeURIComponent(copyRes.error.message)}`);
+      }
+      const publicUrl = supabase.storage.from(imageBucketName).getPublicUrl(destPath).data.publicUrl;
+      imageUrls.push(publicUrl);
+    }
+
+    for (const file of files) {
+      const originalName = file.name || "image";
+      const ext = originalName.includes(".") ? originalName.split(".").pop() : undefined;
+      const safeExt = ext ? ext.toLowerCase().replace(/[^a-z0-9]+/g, "") : undefined;
+      const randomPart = crypto.randomUUID();
+      const storagePath = `assignments/${data.id}/questions/${questionId}/${randomPart}${safeExt ? `.${safeExt}` : ""}`;
+
+      const uploadRes = await supabase.storage
+        .from(imageBucketName)
+        .upload(storagePath, file, {
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
+
+      if (uploadRes.error) {
+        redirect(`/teacher/assignments/new?error=${encodeURIComponent(uploadRes.error.message)}`);
+      }
+
+      const publicUrl = supabase.storage.from(imageBucketName).getPublicUrl(storagePath).data.publicUrl;
+      imageUrls.push(publicUrl);
+    }
+
+    if (imageUrls.length === 0) {
+      await supabase.from("assignment_questions").update({ image_url: null }).eq("id", questionId);
+      continue;
+    }
+
+    await supabase
+      .from("assignment_questions")
+      .update({ image_url: JSON.stringify(imageUrls) })
+      .eq("id", questionId);
+  }
+
   const optionRows = mixedQuestions.flatMap((question, idx) => {
     if (question.type !== "objective") return [];
     const questionId = questionIdBySort.get(idx + 1);
@@ -194,6 +317,90 @@ export async function createAssignment(formData: FormData) {
   revalidatePath("/student/dashboard");
   revalidatePath("/student/assignments");
   redirect(`/teacher/assignments/${data.id}`);
+}
+
+export async function uploadTeacherLibraryImage(formData: FormData) {
+  const { user, profile } = await getAuthState();
+  if (!user || profile?.role !== "teacher") {
+    return { ok: false as const, error: "권한이 없습니다." };
+  }
+
+  const file = formData.get("file");
+  if (!file || typeof file !== "object" || !("arrayBuffer" in file)) {
+    return { ok: false as const, error: "파일을 선택해 주세요." };
+  }
+  const f = file as File;
+  if (typeof f.size !== "number" || f.size <= 0) {
+    return { ok: false as const, error: "파일을 선택해 주세요." };
+  }
+
+  const supabase = createServerSupabaseClient();
+  const bucket = ASSIGNMENT_QUESTION_IMAGE_BUCKET;
+  const originalName = f.name || "image";
+  const ext = originalName.includes(".") ? originalName.split(".").pop() : undefined;
+  const safeExt = ext ? ext.toLowerCase().replace(/[^a-z0-9]+/g, "") : undefined;
+  const storagePath = `library/${user.id}/${crypto.randomUUID()}${safeExt ? `.${safeExt}` : ""}`;
+
+  const uploadRes = await supabase.storage.from(bucket).upload(storagePath, f, {
+    contentType: f.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (uploadRes.error) {
+    return { ok: false as const, error: uploadRes.error.message };
+  }
+
+  const insertResult = (await supabase.from("teacher_image_assets").insert({
+    teacher_id: user.id,
+    storage_path: storagePath,
+  })) as unknown as { error: { message: string } | null };
+
+  if (insertResult.error) {
+    await supabase.storage.from(bucket).remove([storagePath]);
+    return { ok: false as const, error: friendlyTeacherImageTableError(insertResult.error.message) };
+  }
+
+  revalidatePath("/teacher/assignments/new");
+  return { ok: true as const };
+}
+
+export async function deleteTeacherLibraryImage(formData: FormData) {
+  const assetId = String(formData.get("assetId") ?? "").trim();
+  if (!assetId) {
+    return { ok: false as const, error: "잘못된 요청입니다." };
+  }
+
+  const { user, profile } = await getAuthState();
+  if (!user || profile?.role !== "teacher") {
+    return { ok: false as const, error: "권한이 없습니다." };
+  }
+
+  const supabase = createServerSupabaseClient();
+  const bucket = ASSIGNMENT_QUESTION_IMAGE_BUCKET;
+
+  const rowResult = (await supabase
+    .from("teacher_image_assets")
+    .select("storage_path")
+    .filter("id", "eq", assetId)
+    .filter("teacher_id", "eq", user.id)
+    .maybeSingle()) as unknown as {
+    data: { storage_path: string } | null;
+    error: { message: string } | null;
+  };
+
+  if (rowResult.error || !rowResult.data) {
+    return { ok: false as const, error: "이미지를 찾을 수 없습니다." };
+  }
+
+  const delDb = (await supabase.from("teacher_image_assets").delete().filter("id", "eq", assetId)) as unknown as {
+    error: { message: string } | null;
+  };
+  if (delDb.error) {
+    return { ok: false as const, error: friendlyTeacherImageTableError(delDb.error.message) };
+  }
+
+  await supabase.storage.from(bucket).remove([rowResult.data.storage_path]);
+  revalidatePath("/teacher/assignments/new");
+  return { ok: true as const };
 }
 
 export async function saveSubmissionFeedback(formData: FormData) {

@@ -1,3 +1,4 @@
+import { signAssignmentQuestionImageUrlJson } from "@/lib/assignment-question-images";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type {
   AssignmentQuestionOptionRow,
@@ -165,10 +166,17 @@ export async function getStudentAssignmentDetail(assignmentId: string, studentId
       list.push(option);
       optionsMap.set(option.question_id, list);
     });
-    const mixedQuestions = questions.map((question) => ({
+    const mixedQuestionsRaw = questions.map((question) => ({
       ...question,
       options: (optionsMap.get(question.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
     }));
+    const signedTtlSeconds = 60 * 60 * 24;
+    const mixedQuestions = await Promise.all(
+      mixedQuestionsRaw.map(async (question) => ({
+        ...question,
+        image_url: await signAssignmentQuestionImageUrlJson(supabase, question.image_url ?? null, signedTtlSeconds),
+      })),
+    );
 
     return {
       assignment: assignmentResult.data,

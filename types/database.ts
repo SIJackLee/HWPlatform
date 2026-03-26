@@ -202,6 +202,34 @@ export interface Database {
           },
         ];
       };
+      teacher_image_assets: {
+        Row: {
+          id: string;
+          teacher_id: string;
+          storage_path: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          teacher_id: string;
+          storage_path: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          teacher_id?: string;
+          storage_path?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teacher_image_assets_teacher_id_fkey";
+            columns: ["teacher_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       assignment_objective_details: {
         Row: {
           assignment_id: string;
@@ -276,6 +304,7 @@ export interface Database {
           assignment_id: string;
           question_type: "subjective" | "objective";
           prompt: string;
+          image_url: string | null;
           sort_order: number;
           created_at: string;
           updated_at: string;
@@ -285,6 +314,7 @@ export interface Database {
           assignment_id: string;
           question_type: "subjective" | "objective";
           prompt: string;
+          image_url?: string | null;
           sort_order?: number;
           created_at?: string;
           updated_at?: string;
@@ -294,6 +324,7 @@ export interface Database {
           assignment_id?: string;
           question_type?: "subjective" | "objective";
           prompt?: string;
+          image_url?: string | null;
           sort_order?: number;
           created_at?: string;
           updated_at?: string;

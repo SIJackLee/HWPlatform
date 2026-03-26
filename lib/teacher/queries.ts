@@ -1,3 +1,4 @@
+import { signAssignmentQuestionImageUrlJson } from "@/lib/assignment-question-images";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type {
   AssignmentRow,
@@ -15,16 +16,21 @@ import type { Database } from "@/types/database";
 
 type AssignmentSummaryRow = Pick<Database["public"]["Tables"]["assignments"]["Row"], "id" | "title" | "teacher_id">;
 
+function toReadableDbError(prefix: string, err: { message?: string; code?: string; details?: string; hint?: string }) {
+  const parts = [err.message, err.code, err.details, err.hint].filter((p) => p != null && String(p).length > 0);
+  return new Error(parts.length > 0 ? `${prefix}: ${parts.join(" | ")}` : prefix);
+}
+
 export async function getTeacherDashboardStats(teacherId: string): Promise<TeacherDashboardStats> {
   const supabase = createServerSupabaseClient();
 
   const { data: assignments, error: assignmentError } = await supabase
     .from("assignments")
     .select("*")
-    .filter("teacher_id", "eq", teacherId)
+    .eq("teacher_id", teacherId)
     .order("created_at", { ascending: false });
 
-  if (assignmentError) throw assignmentError;
+  if (assignmentError) throw toReadableDbError("assignments 조회 실패", assignmentError);
   const assignmentRows = (assignments ?? []) as unknown as AssignmentRow[];
 
   const assignmentIds = assignmentRows.map((assignment) => assignment.id);
@@ -36,7 +42,7 @@ export async function getTeacherDashboardStats(teacherId: string): Promise<Teach
       .select("id", { count: "exact", head: true })
       .in("assignment_id", assignmentIds);
 
-    if (submissionError) throw submissionError;
+    if (submissionError) throw toReadableDbError("제출 수 집계 실패", submissionError);
     totalSubmissions = submissionCount ?? 0;
   }
 
@@ -142,14 +148,51 @@ export async function getTeacherAssignmentDetail(assignmentId: string, teacherId
   const notSubmittedTargets = targetRows.filter((target) => !submittedStudentIds.has(target.student_id));
   const submittedCount = submittedStudentIds.size;
 
+  const assignmentRow = assignment as unknown as AssignmentRow;
+  let mixedQuestions: TeacherSubmissionMixedQuestion[] = [];
+  if (assignmentRow.question_type === "mixed") {
+    const [questionsResult, optionsResult] = await Promise.all([
+      supabase
+        .from("assignment_questions")
+        .select("*")
+        .filter("assignment_id", "eq", assignmentId)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("assignment_question_options")
+        .select("*, assignment_questions!inner(assignment_id)")
+        .filter("assignment_questions.assignment_id", "eq", assignmentId)
+        .order("sort_order", { ascending: true }),
+    ]);
+    if (questionsResult.error) throw questionsResult.error;
+    if (optionsResult.error) throw optionsResult.error;
+
+    const questionRows = ((questionsResult.data ?? []) as unknown) as AssignmentQuestionRow[];
+    const optionRows = ((optionsResult.data ?? []) as unknown) as AssignmentQuestionOptionRow[];
+    const optionsMap = new Map<string, AssignmentQuestionOptionRow[]>();
+    optionRows.forEach((option) => {
+      const list = optionsMap.get(option.question_id) ?? [];
+      list.push(option);
+      optionsMap.set(option.question_id, list);
+    });
+    const signedTtlSeconds = 60 * 60 * 24;
+    mixedQuestions = await Promise.all(
+      questionRows.map(async (question) => ({
+        ...question,
+        options: (optionsMap.get(question.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
+        image_url: await signAssignmentQuestionImageUrlJson(supabase, question.image_url ?? null, signedTtlSeconds),
+      })),
+    );
+  }
+
   return {
-    assignment: assignment as unknown as AssignmentRow,
+    assignment: assignmentRow,
     submissions: submissionRows,
     targets: targetRows,
     targetCount: targetRows.length,
     submittedCount,
     notSubmittedCount: Math.max(targetRows.length - submittedCount, 0),
     notSubmittedTargets,
+    mixedQuestions,
   };
 }
 
@@ -222,10 +265,14 @@ export async function getTeacherSubmissionDetail(
     optionsMap.set(option.question_id, list);
   });
 
-  const mixedQuestions: TeacherSubmissionMixedQuestion[] = questionRows.map((question) => ({
-    ...question,
-    options: (optionsMap.get(question.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
-  }));
+  const signedTtlSeconds = 60 * 60 * 24;
+  const mixedQuestions: TeacherSubmissionMixedQuestion[] = await Promise.all(
+    questionRows.map(async (question) => ({
+      ...question,
+      options: (optionsMap.get(question.id) ?? []).sort((a, b) => a.sort_order - b.sort_order),
+      image_url: await signAssignmentQuestionImageUrlJson(supabase, question.image_url ?? null, signedTtlSeconds),
+    })),
+  );
 
   return {
     assignmentQuestionType: "mixed",

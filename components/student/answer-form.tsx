@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { submitAssignmentAnswer } from "@/actions/student";
+import { QuestionImages } from "@/components/common/question-images";
 import { Button } from "@/components/ui/button";
 
 export function AnswerForm({
@@ -28,6 +29,7 @@ export function AnswerForm({
     question_type: "subjective" | "objective";
     prompt: string;
     sort_order: number;
+    image_url?: string | null;
     options: Array<{ id: string; option_text: string; sort_order: number }>;
   }>;
   defaultMixedAnswers?: Array<{
@@ -120,6 +122,7 @@ export function AnswerForm({
               <p className="text-sm font-medium">
                 {question.sort_order}. {question.prompt}
               </p>
+              <QuestionImages imageUrlJson={question.image_url} />
               {question.question_type === "objective" ? (
                 <div className="space-y-2">
                   {question.options.map((option) => (
