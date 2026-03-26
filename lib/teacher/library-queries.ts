@@ -1,7 +1,7 @@
 import { ASSIGNMENT_QUESTION_IMAGE_BUCKET } from "@/lib/assignment-question-images";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-export type TeacherLibraryAssetPreview = { id: string; previewUrl: string };
+export type TeacherLibraryAssetPreview = { id: string; previewUrl: string; filename: string };
 
 const SIGNED_PREVIEW_TTL_SECONDS = 60 * 60 * 24;
 
@@ -9,7 +9,7 @@ export async function getTeacherImageLibraryForForm(teacherId: string): Promise<
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from("teacher_image_assets")
-    .select("id, storage_path")
+    .select("id, storage_path, original_filename")
     .eq("teacher_id", teacherId)
     .order("created_at", { ascending: false });
 
@@ -28,7 +28,12 @@ export async function getTeacherImageLibraryForForm(teacherId: string): Promise<
       .from(bucket)
       .createSignedUrl(row.storage_path, SIGNED_PREVIEW_TTL_SECONDS);
     if (signErr || !signed?.signedUrl) continue;
-    out.push({ id: row.id, previewUrl: signed.signedUrl });
+    const fallbackFilename = decodeURIComponent((row.storage_path.split("/").pop() ?? "image").trim());
+    out.push({
+      id: row.id,
+      previewUrl: signed.signedUrl,
+      filename: (row.original_filename ?? "").trim() || fallbackFilename,
+    });
   }
   return out;
 }

@@ -36,9 +36,14 @@ export default async function TeacherAssignmentDetailPage({
     <section className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader title={assignment.title} description={assignment.description} />
-        <Link href="/teacher/assignments" className={outlineLinkClass}>
-          목록으로
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={`/teacher/assignments/${assignment.id}/edit`} className={outlineLinkClass}>
+            수정
+          </Link>
+          <Link href="/teacher/assignments" className={outlineLinkClass}>
+            목록으로
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border p-4 text-sm">

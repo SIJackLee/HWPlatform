@@ -207,18 +207,21 @@ export interface Database {
           id: string;
           teacher_id: string;
           storage_path: string;
+          original_filename: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           teacher_id: string;
           storage_path: string;
+          original_filename?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           teacher_id?: string;
           storage_path?: string;
+          original_filename?: string | null;
           created_at?: string;
         };
         Relationships: [

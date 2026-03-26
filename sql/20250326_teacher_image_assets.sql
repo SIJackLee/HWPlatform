@@ -3,6 +3,7 @@ create table if not exists public.teacher_image_assets (
   id uuid primary key default gen_random_uuid(),
   teacher_id uuid not null references public.profiles (id) on delete cascade,
   storage_path text not null,
+  original_filename text null,
   created_at timestamptz not null default now()
 );
 

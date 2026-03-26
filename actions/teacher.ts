@@ -52,6 +52,7 @@ export async function createAssignment(formData: FormData) {
     sort_order: number;
     options: Array<{ option_text: string; is_correct: boolean; sort_order: number }>;
     library_asset_ids?: string[];
+    existing_image_urls?: string[];
   };
 
   let mixedQuestions: MixedQuestionInput[] = [];
@@ -321,6 +322,282 @@ export async function createAssignment(formData: FormData) {
   redirect(`/teacher/assignments/${data.id}`);
 }
 
+export async function updateAssignment(formData: FormData) {
+  const assignmentId = String(formData.get("assignmentId") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const dueAt = String(formData.get("dueAt") ?? "").trim();
+  const mixedQuestionsRaw = String(formData.get("mixedQuestions") ?? "[]");
+  const studentIds = formData
+    .getAll("studentIds")
+    .map((value) => String(value).trim())
+    .filter((value) => value.length > 0);
+
+  if (!assignmentId || !title || !description || !dueAt || studentIds.length === 0) {
+    redirect(`/teacher/assignments/${assignmentId || ""}/edit?error=모든 필드를 입력해 주세요.`);
+  }
+
+  const dueDate = new Date(dueAt);
+  if (Number.isNaN(dueDate.getTime())) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=마감일 형식이 올바르지 않습니다.`);
+  }
+  const nowMs = Date.now();
+  const safeDueDateMs = dueDate.getTime() <= nowMs + 5000 ? nowMs + 60_000 : dueDate.getTime();
+  const safeDueIso = new Date(safeDueDateMs).toISOString();
+
+  type MixedQuestionInput = {
+    type: "subjective" | "objective";
+    prompt: string;
+    sort_order: number;
+    options: Array<{ option_text: string; is_correct: boolean; sort_order: number }>;
+    library_asset_ids?: string[];
+    existing_image_urls?: string[];
+  };
+
+  let mixedQuestions: MixedQuestionInput[] = [];
+  try {
+    mixedQuestions = JSON.parse(mixedQuestionsRaw) as MixedQuestionInput[];
+  } catch {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=혼합형 문항 데이터 형식이 올바르지 않습니다.`);
+  }
+  if (!Array.isArray(mixedQuestions) || mixedQuestions.length === 0) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=혼합형 문항을 1개 이상 추가해 주세요.`);
+  }
+
+  const invalidMixed = mixedQuestions.findIndex((question) => {
+    if (!question.prompt?.trim()) return true;
+    if (question.type === "objective") {
+      const validOptions = (question.options ?? []).filter((option) => option.option_text?.trim().length > 0);
+      const correctCount = validOptions.filter((option) => option.is_correct).length;
+      return validOptions.length < 2 || correctCount < 1;
+    }
+    return false;
+  });
+  if (invalidMixed >= 0) {
+    redirect(
+      `/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(`${invalidMixed + 1}번 문항 입력을 확인해 주세요.`)}`,
+    );
+  }
+
+  const { user, profile } = await getAuthState();
+  if (!user || profile?.role !== "teacher") {
+    redirect("/login?error=권한이 없습니다.");
+  }
+
+  const supabase = createServerSupabaseClient();
+  const assignmentResult = (await supabase
+    .from("assignments")
+    .select("id")
+    .eq("id", assignmentId)
+    .eq("teacher_id", user.id)
+    .maybeSingle()) as unknown as {
+    data: { id: string } | null;
+    error: { message: string } | null;
+  };
+  if (assignmentResult.error || !assignmentResult.data) {
+    redirect("/teacher/assignments?error=수정 권한이 없습니다.");
+  }
+
+  const submissionsCountResult = (await supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("assignment_id", assignmentId)) as unknown as {
+    count: number | null;
+    error: { message: string } | null;
+  };
+  if (submissionsCountResult.error) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(submissionsCountResult.error.message)}`);
+  }
+  if ((submissionsCountResult.count ?? 0) > 0) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=이미 제출이 존재하여 수정할 수 없습니다.`);
+  }
+
+  const studentsCheckResult = (await supabase
+    .from("profiles")
+    .select("id")
+    .filter("role", "eq", "student")
+    .filter("is_active", "eq", true)
+    .in("id", studentIds)) as unknown as {
+    data: Array<{ id: string }> | null;
+    error: { message: string } | null;
+  };
+  if (studentsCheckResult.error) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(studentsCheckResult.error.message)}`);
+  }
+  const validStudentIds = new Set((studentsCheckResult.data ?? []).map((student) => student.id));
+  if (validStudentIds.size === 0) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=유효한 student 대상을 1명 이상 선택해 주세요.`);
+  }
+
+  const assignmentUpdateResult = (await supabase
+    .from("assignments")
+    .update({
+      title,
+      description,
+      due_at: safeDueIso,
+    })
+    .eq("id", assignmentId)
+    .eq("teacher_id", user.id)) as unknown as { error: { message: string } | null };
+  if (assignmentUpdateResult.error) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(assignmentUpdateResult.error.message)}`);
+  }
+
+  await supabase.from("assignment_targets").delete().eq("assignment_id", assignmentId);
+  const targetInsert = (await supabase.from("assignment_targets").insert(
+    Array.from(validStudentIds).map((studentId) => ({ assignment_id: assignmentId, student_id: studentId })),
+  )) as unknown as { error: { message: string } | null };
+  if (targetInsert.error) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(targetInsert.error.message)}`);
+  }
+
+  const oldQuestionsResult = (await supabase
+    .from("assignment_questions")
+    .select("id")
+    .eq("assignment_id", assignmentId)) as unknown as {
+    data: Array<{ id: string }> | null;
+    error: { message: string } | null;
+  };
+  if (oldQuestionsResult.error) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(oldQuestionsResult.error.message)}`);
+  }
+  const oldQuestionIds = (oldQuestionsResult.data ?? []).map((q) => q.id);
+  if (oldQuestionIds.length > 0) {
+    await supabase.from("assignment_question_options").delete().in("question_id", oldQuestionIds);
+  }
+  await supabase.from("assignment_questions").delete().eq("assignment_id", assignmentId);
+
+  const questionsWriter = supabase.from("assignment_questions") as unknown as {
+    insert: (values: Array<{
+      assignment_id: string;
+      question_type: "subjective" | "objective";
+      prompt: string;
+      sort_order: number;
+    }>) => {
+      select: (fields: string) => Promise<{
+        data: Array<{ id: string; sort_order: number }> | null;
+        error: { message: string } | null;
+      }>;
+    };
+  };
+  const questionsInsert = await questionsWriter
+    .insert(
+      mixedQuestions.map((question, idx) => ({
+        assignment_id: assignmentId,
+        question_type: question.type,
+        prompt: question.prompt.trim(),
+        sort_order: idx + 1,
+      })),
+    )
+    .select("id, sort_order");
+  if (questionsInsert.error || !questionsInsert.data) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(questionsInsert.error?.message ?? "문항 저장 실패")}`);
+  }
+  const questionIdBySort = new Map<number, string>(questionsInsert.data.map((row) => [row.sort_order, row.id]));
+
+  const imageBucketName = ASSIGNMENT_QUESTION_IMAGE_BUCKET;
+  for (const [questionIndex, questionInput] of mixedQuestions.entries()) {
+    const questionId = questionIdBySort.get(questionIndex + 1);
+    if (!questionId) continue;
+
+    const fileFieldName = `questionImageFiles_${questionIndex}`;
+    const files = formData.getAll(fileFieldName).filter((f): f is File => {
+      if (!f) return false;
+      const candidate = f as unknown as { arrayBuffer?: unknown; size?: unknown };
+      if (typeof candidate.arrayBuffer !== "function") return false;
+      if (typeof candidate.size !== "number" || candidate.size <= 0) return false;
+      return true;
+    });
+
+    const libraryIds = (questionInput.library_asset_ids ?? []).filter((id) => typeof id === "string" && id.length > 0);
+    const existingUrls = (questionInput.existing_image_urls ?? []).filter((url) => typeof url === "string" && url.length > 0);
+    let libraryRows: Array<{ id: string; storage_path: string }> = [];
+    if (libraryIds.length > 0) {
+      const libResult = (await supabase
+        .from("teacher_image_assets")
+        .select("id, storage_path")
+        .eq("teacher_id", user.id)
+        .in("id", libraryIds)) as unknown as {
+        data: Array<{ id: string; storage_path: string }> | null;
+        error: { message: string } | null;
+      };
+      if (libResult.error) {
+        redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(libResult.error.message)}`);
+      }
+      libraryRows = libResult.data ?? [];
+      if (libraryRows.length !== libraryIds.length) {
+        redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent("이미지 라이브러리 항목을 찾을 수 없습니다.")}`);
+      }
+    }
+
+    const pathById = new Map(libraryRows.map((r) => [r.id, r.storage_path]));
+    const imageUrls: string[] = [...existingUrls];
+
+    for (const assetId of libraryIds) {
+      const sourcePath = pathById.get(assetId);
+      if (!sourcePath) continue;
+      const sourceTail = sourcePath.includes("/") ? sourcePath.split("/").pop() ?? sourcePath : sourcePath;
+      const extFromSource = sourceTail.includes(".") ? sourceTail.split(".").pop() : undefined;
+      const safeExt = extFromSource ? extFromSource.toLowerCase().replace(/[^a-z0-9]+/g, "") : undefined;
+      const destPath = `assignments/${assignmentId}/questions/${questionId}/${crypto.randomUUID()}${safeExt ? `.${safeExt}` : ""}`;
+      const copyRes = await supabase.storage.from(imageBucketName).copy(sourcePath, destPath);
+      if (copyRes.error) {
+        redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(copyRes.error.message)}`);
+      }
+      imageUrls.push(supabase.storage.from(imageBucketName).getPublicUrl(destPath).data.publicUrl);
+    }
+
+    for (const file of files) {
+      const originalName = file.name || "image";
+      const ext = originalName.includes(".") ? originalName.split(".").pop() : undefined;
+      const safeExt = ext ? ext.toLowerCase().replace(/[^a-z0-9]+/g, "") : undefined;
+      const storagePath = `assignments/${assignmentId}/questions/${questionId}/${crypto.randomUUID()}${safeExt ? `.${safeExt}` : ""}`;
+      const uploadRes = await supabase.storage.from(imageBucketName).upload(storagePath, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (uploadRes.error) {
+        redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(uploadRes.error.message)}`);
+      }
+      imageUrls.push(supabase.storage.from(imageBucketName).getPublicUrl(storagePath).data.publicUrl);
+    }
+
+    await supabase
+      .from("assignment_questions")
+      .update({ image_url: imageUrls.length > 0 ? JSON.stringify(imageUrls) : null })
+      .eq("id", questionId);
+  }
+
+  const optionRows = mixedQuestions.flatMap((question, idx) => {
+    if (question.type !== "objective") return [];
+    const questionId = questionIdBySort.get(idx + 1);
+    if (!questionId) return [];
+    return (question.options ?? [])
+      .filter((option) => option.option_text.trim().length > 0)
+      .map((option, optionIdx) => ({
+        question_id: questionId,
+        option_text: option.option_text.trim(),
+        is_correct: option.is_correct,
+        sort_order: optionIdx + 1,
+      }));
+  });
+  if (optionRows.length > 0) {
+    const optionsInsert = (await supabase.from("assignment_question_options").insert(optionRows)) as unknown as {
+      error: { message: string } | null;
+    };
+    if (optionsInsert.error) {
+      redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(optionsInsert.error.message)}`);
+    }
+  }
+
+  revalidatePath("/teacher/dashboard");
+  revalidatePath("/teacher/assignments");
+  revalidatePath("/teacher/assignments/new");
+  revalidatePath(`/teacher/assignments/${assignmentId}`);
+  revalidatePath("/student/dashboard");
+  revalidatePath("/student/assignments");
+  redirect(`/teacher/assignments/${assignmentId}?success=${encodeURIComponent("숙제가 수정되었습니다.")}`);
+}
+
 export async function uploadTeacherLibraryImage(formData: FormData) {
   const { user, profile } = await getAuthState();
   if (!user || profile?.role !== "teacher") {
@@ -361,6 +638,7 @@ export async function uploadTeacherLibraryImage(formData: FormData) {
   const insertResult = (await supabase.from("teacher_image_assets").insert({
     teacher_id: user.id,
     storage_path: storagePath,
+    original_filename: originalName,
   })) as unknown as { error: { message: string } | null };
 
   if (insertResult.error) {

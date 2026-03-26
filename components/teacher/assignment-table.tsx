@@ -43,6 +43,9 @@ export function AssignmentTable({ assignments }: { assignments: TeacherAssignmen
               <Link href={`/teacher/assignments/${assignment.id}`} className={outlineSmClass}>
                 보기
               </Link>
+              <Link href={`/teacher/assignments/${assignment.id}/edit`} className={outlineSmClass}>
+                수정
+              </Link>
               <DeleteAssignmentForm assignmentId={assignment.id} title={assignment.title} />
             </div>
           </li>
@@ -80,6 +83,9 @@ export function AssignmentTable({ assignments }: { assignments: TeacherAssignmen
                 <div className="flex items-center gap-2">
                   <Link href={`/teacher/assignments/${assignment.id}`} className={outlineSmClass}>
                     보기
+                  </Link>
+                  <Link href={`/teacher/assignments/${assignment.id}/edit`} className={outlineSmClass}>
+                    수정
                   </Link>
                   <DeleteAssignmentForm assignmentId={assignment.id} title={assignment.title} />
                 </div>

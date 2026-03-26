@@ -24,9 +24,30 @@ interface MixedQuestionDraft {
   collapsed?: boolean;
   /** 선택한 라이브러리 asset id (순서 유지). 서버에서 문항 경로로 복사됨. */
   libraryAssetIds: string[];
+  /** 수정 모드에서 유지할 기존 문항 이미지 URL 목록 */
+  existingImageUrls: string[];
 }
 
-const DRAFT_STORAGE_KEY = "teacher-assignment-draft";
+export interface AssignmentFormInitialQuestion {
+  type: QuestionType;
+  prompt: string;
+  options: string[];
+  correctOptionIndexes: number[];
+  existingImageUrls: string[];
+}
+
+export interface AssignmentFormInitialData {
+  assignmentId: string;
+  title: string;
+  description: string;
+  dueAt: string;
+  targetStudentIds: string[];
+  mixedQuestions: AssignmentFormInitialQuestion[];
+}
+
+type AssignmentSubmitAction = (formData: FormData) => void | Promise<void>;
+
+const DRAFT_STORAGE_KEY_PREFIX = "teacher-assignment-draft";
 const LIBRARY_FILE_SIZE_LIMIT_BYTES = 50 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
@@ -56,15 +77,18 @@ function normalizeDraftQuestions(raw: unknown): MixedQuestionDraft[] {
       libraryAssetIds: Array.isArray(q.libraryAssetIds)
         ? q.libraryAssetIds.filter((id): id is string => typeof id === "string")
         : [],
+      existingImageUrls: Array.isArray(q.existingImageUrls)
+        ? q.existingImageUrls.filter((v): v is string => typeof v === "string" && v.length > 0)
+        : [],
     };
   });
 }
 
-function AssignmentSubmitButton() {
+function AssignmentSubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" className="w-full md:w-auto" disabled={pending} aria-busy={pending}>
-      {pending ? "처리 중…" : "숙제 등록"}
+      {pending ? "처리 중…" : label}
     </Button>
   );
 }
@@ -73,19 +97,29 @@ export function AssignmentForm({
   errorMessage,
   students,
   libraryAssets,
+  mode = "create",
+  submitAction = createAssignment,
+  initialData,
 }: {
   errorMessage?: string;
   students: StudentOption[];
   libraryAssets: TeacherLibraryAssetPreview[];
+  mode?: "create" | "edit";
+  submitAction?: AssignmentSubmitAction;
+  initialData?: AssignmentFormInitialData;
 }) {
+  const isEditMode = mode === "edit";
+  const submitLabel = isEditMode ? "숙제 수정" : "숙제 등록";
+  const draftStorageKey = `${DRAFT_STORAGE_KEY_PREFIX}-${initialData?.assignmentId ?? "new"}`;
   const router = useRouter();
   const libraryFileInputRef = useRef<HTMLInputElement | null>(null);
   const dueAtInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(() => {
     if (typeof window === "undefined") return null;
+    if (isEditMode) return null;
     try {
-      const saved = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      const saved = window.localStorage.getItem(draftStorageKey);
       if (!saved) return null;
       const parsed = JSON.parse(saved) as { savedAt?: number };
       return typeof parsed.savedAt === "number" ? parsed.savedAt : null;
@@ -95,8 +129,21 @@ export function AssignmentForm({
   });
 
   const [mixedQuestions, setMixedQuestions] = useState<MixedQuestionDraft[]>(() => {
+    if (initialData && initialData.mixedQuestions.length > 0) {
+      return initialData.mixedQuestions.map((question) => ({
+        id: crypto.randomUUID(),
+        type: question.type,
+        prompt: question.prompt,
+        options: question.options.length > 0 ? question.options : ["", ""],
+        correctOptionIndexes: question.correctOptionIndexes,
+        collapsed: false,
+        libraryAssetIds: [],
+        existingImageUrls: question.existingImageUrls,
+      }));
+    }
+
     if (typeof window !== "undefined") {
-      const saved = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      const saved = window.localStorage.getItem(draftStorageKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as { mixedQuestions?: unknown };
@@ -117,6 +164,7 @@ export function AssignmentForm({
         correctOptionIndexes: [],
         collapsed: false,
         libraryAssetIds: [],
+        existingImageUrls: [],
       },
     ];
   });
@@ -134,6 +182,7 @@ export function AssignmentForm({
   const questionPromptRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   const previewById = useMemo(() => new Map(libraryAssets.map((a) => [a.id, a.previewUrl])), [libraryAssets]);
+  const filenameById = useMemo(() => new Map(libraryAssets.map((a) => [a.id, a.filename])), [libraryAssets]);
 
   const mixedQuestionsPayload = JSON.stringify(
     mixedQuestions.map((question, index) => ({
@@ -141,6 +190,7 @@ export function AssignmentForm({
       prompt: question.prompt.trim(),
       sort_order: index + 1,
       library_asset_ids: question.libraryAssetIds,
+      existing_image_urls: question.existingImageUrls,
       options: question.options
         .map((optionText, optionIndex) => ({
           option_text: optionText.trim(),
@@ -327,7 +377,7 @@ export function AssignmentForm({
       const desc = descEl?.value?.trim() ?? "";
       const hasQuestionDraft =
         mixedQuestions.length > 1 ||
-        mixedQuestions.some((q) => q.prompt.trim().length > 0 || q.libraryAssetIds.length > 0);
+        mixedQuestions.some((q) => q.prompt.trim().length > 0 || q.libraryAssetIds.length > 0 || q.existingImageUrls.length > 0);
       if (title || desc || hasQuestionDraft) {
         e.preventDefault();
         e.returnValue = "";
@@ -340,7 +390,7 @@ export function AssignmentForm({
   return (
     <form
       ref={formRef}
-      action={createAssignment}
+      action={submitAction}
       className="space-y-4 pb-32 md:pb-24"
       onSubmit={(event) => {
         const formEl = event.currentTarget as HTMLFormElement;
@@ -370,6 +420,7 @@ export function AssignmentForm({
         }
       }}
     >
+      {isEditMode && initialData ? <input type="hidden" name="assignmentId" value={initialData.assignmentId} /> : null}
       <input type="hidden" name="mixedQuestions" value={mixedQuestionsPayload} />
       <input type="hidden" name="questionType" value="mixed" />
 
@@ -405,6 +456,7 @@ export function AssignmentForm({
             required
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             placeholder="예: 영어 단어 암기 숙제"
+            defaultValue={initialData?.title ?? ""}
           />
         </div>
 
@@ -442,6 +494,7 @@ export function AssignmentForm({
             rows={6}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             placeholder="숙제 지시사항을 입력하세요."
+            defaultValue={initialData?.description ?? ""}
           />
         </div>
       </section>
@@ -535,6 +588,12 @@ export function AssignmentForm({
                   alt=""
                   className="h-24 w-full object-cover"
                 />
+                <p
+                  className="truncate border-t px-1 py-1 text-[11px] text-muted-foreground"
+                  title={asset.filename}
+                >
+                  {asset.filename}
+                </p>
                 <button
                   type="button"
                   className="absolute right-1 top-1 rounded bg-background/90 px-2 py-1 text-xs text-destructive shadow"
@@ -592,6 +651,7 @@ export function AssignmentForm({
                     correctOptionIndexes: [],
                     collapsed: true,
                     libraryAssetIds: [],
+                    existingImageUrls: [],
                   },
                 ]);
                 setPendingScrollQuestionId(newId);
@@ -718,6 +778,34 @@ export function AssignmentForm({
                   />
                   <div className="space-y-2">
                     <p className="text-sm font-medium">문항 이미지</p>
+                    {question.existingImageUrls.length > 0 ? (
+                      <div className="-mx-1 flex gap-2 overflow-x-auto pb-1">
+                        {question.existingImageUrls.map((url) => (
+                          <div
+                            key={`${question.id}-existing-${url}`}
+                            className="relative flex shrink-0 flex-col items-center gap-1"
+                          >
+                            <div className="relative h-16 w-16 overflow-hidden rounded border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt="" className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                className="absolute right-0 top-0 rounded-bl bg-background/90 px-1 text-[10px]"
+                                onClick={() =>
+                                  updateMixedQuestion(question.id, (prev) => ({
+                                    ...prev,
+                                    existingImageUrls: prev.existingImageUrls.filter((x) => x !== url),
+                                  }))
+                                }
+                              >
+                                ×
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">기존</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {question.libraryAssetIds.length > 0 ? (
                       <div className="-mx-1 flex gap-2 overflow-x-auto pb-1">
                         {question.libraryAssetIds.map((assetId, libIdx) => (
@@ -751,6 +839,12 @@ export function AssignmentForm({
                                 ×
                               </button>
                             </div>
+                            <p
+                              className="max-w-16 truncate text-[10px] text-muted-foreground"
+                              title={filenameById.get(assetId) ?? "이름 없음"}
+                            >
+                              {filenameById.get(assetId) ?? "이름 없음"}
+                            </p>
                             <div className="flex gap-0.5">
                               <button
                                 type="button"
@@ -871,6 +965,7 @@ export function AssignmentForm({
             type="datetime-local"
             required
             className="w-full rounded-md border bg-background px-3 py-2 text-base md:text-sm"
+            defaultValue={initialData?.dueAt ?? ""}
           />
         </div>
 
@@ -884,7 +979,13 @@ export function AssignmentForm({
             <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-3">
               {students.map((student) => (
                 <label key={student.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="studentIds" value={student.id} className="h-4 w-4" />
+                  <input
+                    type="checkbox"
+                    name="studentIds"
+                    value={student.id}
+                    className="h-4 w-4"
+                    defaultChecked={initialData?.targetStudentIds.includes(student.id) ?? false}
+                  />
                   <span>{student.name}</span>
                 </label>
               ))}
@@ -913,7 +1014,7 @@ export function AssignmentForm({
             onClick={() => {
               const savedAt = Date.now();
               window.localStorage.setItem(
-                DRAFT_STORAGE_KEY,
+                draftStorageKey,
                 JSON.stringify({ mixedQuestions, savedAt }),
               );
               setDraftSavedAt(savedAt);
@@ -922,7 +1023,7 @@ export function AssignmentForm({
           >
             임시저장
           </button>
-          <AssignmentSubmitButton />
+          <AssignmentSubmitButton label={submitLabel} />
         </div>
       </div>
 
@@ -959,6 +1060,12 @@ export function AssignmentForm({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={asset.previewUrl} alt="" className="h-20 w-full object-cover" />
+                      <span
+                        className="absolute inset-x-0 bottom-0 truncate bg-background/90 px-1 py-0.5 text-[10px] text-foreground"
+                        title={asset.filename}
+                      >
+                        {asset.filename}
+                      </span>
                       {selected ? (
                         <span className="absolute bottom-1 left-1 rounded bg-primary px-1 text-[10px] text-primary-foreground">
                           {pickerOrder.indexOf(asset.id) + 1}

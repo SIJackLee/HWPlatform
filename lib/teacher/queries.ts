@@ -196,6 +196,85 @@ export async function getTeacherAssignmentDetail(assignmentId: string, teacherId
   };
 }
 
+function parseImageUrlJsonToArray(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === "string" && v.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export async function getTeacherAssignmentForEdit(assignmentId: string, teacherId: string) {
+  const supabase = createServerSupabaseClient();
+
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("assignments")
+    .select("id, title, description, due_at, question_type")
+    .eq("id", assignmentId)
+    .eq("teacher_id", teacherId)
+    .single();
+  if (assignmentError || !assignment) throw assignmentError ?? new Error("숙제를 찾을 수 없습니다.");
+
+  const submissionsCountResult = await supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("assignment_id", assignmentId);
+  if (submissionsCountResult.error) throw submissionsCountResult.error;
+
+  const [targetsResult, questionsResult, optionsResult] = await Promise.all([
+    supabase.from("assignment_targets").select("student_id").eq("assignment_id", assignmentId),
+    supabase.from("assignment_questions").select("id, question_type, prompt, sort_order, image_url").eq("assignment_id", assignmentId).order("sort_order", { ascending: true }),
+    supabase
+      .from("assignment_question_options")
+      .select("question_id, option_text, is_correct, sort_order, assignment_questions!inner(assignment_id)")
+      .eq("assignment_questions.assignment_id", assignmentId)
+      .order("sort_order", { ascending: true }),
+  ]);
+  if (targetsResult.error) throw targetsResult.error;
+  if (questionsResult.error) throw questionsResult.error;
+  if (optionsResult.error) throw optionsResult.error;
+
+  const optionRows = (optionsResult.data ?? []) as Array<{
+    question_id: string;
+    option_text: string;
+    is_correct: boolean;
+    sort_order: number;
+  }>;
+  const optionsMap = new Map<string, typeof optionRows>();
+  optionRows.forEach((row) => {
+    const list = optionsMap.get(row.question_id) ?? [];
+    list.push(row);
+    optionsMap.set(row.question_id, list);
+  });
+
+  const questions = (questionsResult.data ?? []).map((question) => {
+    const options = optionsMap.get(question.id) ?? [];
+    return {
+      type: question.question_type,
+      prompt: question.prompt,
+      options: options.map((o) => o.option_text),
+      correctOptionIndexes: options.filter((o) => o.is_correct).map((o) => Math.max(o.sort_order - 1, 0)),
+      existingImageUrls: parseImageUrlJsonToArray(question.image_url),
+    };
+  });
+
+  return {
+    assignment: assignment as {
+      id: string;
+      title: string;
+      description: string;
+      due_at: string;
+      question_type: "mixed" | "subjective" | "objective";
+    },
+    targetStudentIds: (targetsResult.data ?? []).map((row) => row.student_id),
+    questions,
+    submissionCount: submissionsCountResult.count ?? 0,
+  };
+}
+
 export async function getTeacherSubmissionDetail(
   assignmentId: string,
   submissionId: string,
