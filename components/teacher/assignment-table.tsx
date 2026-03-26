@@ -4,7 +4,7 @@ import { DeleteAssignmentForm } from "@/components/teacher/delete-assignment-for
 import type { TeacherAssignmentListItem } from "@/types/teacher";
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleString("ko-KR");
+  return new Date(date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
 export function AssignmentTable({ assignments }: { assignments: TeacherAssignmentListItem[] }) {

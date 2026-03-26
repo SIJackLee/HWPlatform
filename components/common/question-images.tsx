@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { parseImageUrls } from "@/lib/assignment-question-images";
 
 export function QuestionImages({ imageUrlJson }: { imageUrlJson: string | null | undefined }) {
   const urls = parseImageUrls(imageUrlJson);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!lightboxUrl) return;
+    closeButtonRef.current?.focus();
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightboxUrl(null);
     };
@@ -55,6 +58,7 @@ export function QuestionImages({ imageUrlJson }: { imageUrlJson: string | null |
         >
           <button
             type="button"
+            ref={closeButtonRef}
             className="absolute right-4 top-4 rounded-md border border-white/30 bg-black/50 px-3 py-1 text-sm text-white"
             onClick={() => setLightboxUrl(null)}
           >

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useFormStatus } from "react-dom";
 
 import { createAssignment, deleteTeacherLibraryImage, uploadTeacherLibraryImage } from "@/actions/teacher";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,15 @@ function normalizeDraftQuestions(raw: unknown): MixedQuestionDraft[] {
         : [],
     };
   });
+}
+
+function AssignmentSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" className="w-full md:w-auto" disabled={pending} aria-busy={pending}>
+      {pending ? "처리 중…" : "숙제 등록"}
+    </Button>
+  );
 }
 
 export function AssignmentForm({
@@ -228,6 +238,9 @@ export function AssignmentForm({
 
   useEffect(() => {
     if (!pickerTargetId) return;
+    const cancelBtn = document.querySelector<HTMLButtonElement>("[data-picker-cancel]");
+    cancelBtn?.focus();
+
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -410,7 +423,7 @@ export function AssignmentForm({
                 />
                 <button
                   type="button"
-                  className="absolute right-1 top-1 rounded bg-background/90 px-1.5 text-xs text-destructive shadow"
+                  className="absolute right-1 top-1 rounded bg-background/90 px-2 py-1 text-xs text-destructive shadow"
                   onClick={() => void handleLibraryDelete(asset.id)}
                   aria-label="라이브러리에서 삭제"
                 >
@@ -452,7 +465,7 @@ export function AssignmentForm({
                     prompt: "",
                     options: ["", ""],
                     correctOptionIndexes: [],
-                    collapsed: false,
+                    collapsed: true,
                     libraryAssetIds: [],
                   },
                 ])
@@ -479,7 +492,7 @@ export function AssignmentForm({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="text-xs"
+                    className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs disabled:opacity-40 disabled:pointer-events-none"
                     disabled={idx === 0}
                     onClick={() =>
                       setMixedQuestions((prev) => {
@@ -493,7 +506,7 @@ export function AssignmentForm({
                   </button>
                   <button
                     type="button"
-                    className="text-xs"
+                    className="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs disabled:opacity-40 disabled:pointer-events-none"
                     disabled={idx === mixedQuestions.length - 1}
                     onClick={() =>
                       setMixedQuestions((prev) => {
@@ -739,7 +752,7 @@ export function AssignmentForm({
           {errorMessage}
         </p>
       ) : null}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:static md:border-none md:bg-transparent md:px-0 md:py-0 md:pb-0">
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-30 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:static md:border-none md:bg-transparent md:px-0 md:pt-0 md:pb-0">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-2">
           <button
             type="button"
@@ -756,9 +769,7 @@ export function AssignmentForm({
           >
             임시저장
           </button>
-          <Button type="submit" className="w-full md:w-auto">
-            숙제 등록
-          </Button>
+          <AssignmentSubmitButton />
         </div>
       </div>
 
@@ -767,9 +778,16 @@ export function AssignmentForm({
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur"
           role="dialog"
           aria-modal="true"
+          aria-labelledby="library-picker-title"
+          onClick={() => setPickerTargetId(null)}
         >
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-background p-4 shadow-lg">
-            <p className="text-sm font-medium">라이브러리에서 이미지 선택</p>
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-background p-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="library-picker-title" className="text-sm font-medium">
+              라이브러리에서 이미지 선택
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">이미지를 눌러 선택/해제합니다. 순서는 선택한 순서입니다.</p>
             {libraryAssets.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">라이브러리가 비어 있습니다. 먼저 위에서 이미지를 추가하세요.</p>
@@ -799,7 +817,13 @@ export function AssignmentForm({
               </div>
             )}
             <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setPickerTargetId(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPickerTargetId(null)}
+                autoFocus
+                data-picker-cancel
+              >
                 취소
               </Button>
               <Button type="button" onClick={applyPicker}>

@@ -1,10 +1,22 @@
  "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { submitAssignmentAnswer } from "@/actions/student";
 import { QuestionImages } from "@/components/common/question-images";
 import { Button } from "@/components/ui/button";
+
+function AnswerSubmitButton({ submittedAt }: { submittedAt?: string | null }) {
+  const { pending } = useFormStatus();
+  const label = submittedAt ? "제출 내용 수정" : "답안 제출";
+
+  return (
+    <Button type="submit" className="w-full md:w-auto" disabled={pending} aria-busy={pending}>
+      {pending ? "처리 중…" : label}
+    </Button>
+  );
+}
 
 export function AnswerForm({
   assignmentId,
@@ -190,11 +202,11 @@ export function AnswerForm({
           {errorMessage}
         </p>
       ) : null}
-      <div className="fixed inset-x-0 bottom-16 z-30 border-t bg-background/95 px-4 py-3 backdrop-blur md:static md:border-none md:bg-transparent md:px-0 md:py-0">
+      <div
+        className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-30 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:static md:border-none md:bg-transparent md:px-0 md:pt-0 md:pb-0"
+      >
         <div className="mx-auto w-full max-w-6xl">
-          <Button type="submit" className="w-full md:w-auto">
-            {submittedAt ? "제출 내용 수정" : "답안 제출"}
-          </Button>
+          <AnswerSubmitButton submittedAt={submittedAt} />
         </div>
       </div>
     </form>

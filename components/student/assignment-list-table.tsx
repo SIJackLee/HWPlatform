@@ -4,7 +4,7 @@ import { AssignmentStatusBadge } from "@/components/student/assignment-status-ba
 import type { StudentAssignmentItem } from "@/types/student";
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleString("ko-KR");
+  return new Date(date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
 
 export function AssignmentListTable({ items }: { items: StudentAssignmentItem[] }) {

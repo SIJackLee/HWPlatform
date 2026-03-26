@@ -45,7 +45,8 @@ export default async function StudentAssignmentDetailPage({
 
       <div className="rounded-lg border p-4 text-sm">
         <p>
-          <span className="font-medium">마감일:</span> {new Date(assignment.due_at).toLocaleString("ko-KR")}
+          <span className="font-medium">마감일:</span>{" "}
+          {new Date(assignment.due_at).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}
         </p>
         <p className="mt-2">
           <span className="font-medium">문항 유형:</span>{" "}

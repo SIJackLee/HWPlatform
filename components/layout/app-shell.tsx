@@ -46,7 +46,9 @@ export function AppShell({ title, navItems, actions, children }: AppShellProps) 
         <main className="rounded-lg border bg-background p-6">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+      <nav
+        className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur md:hidden"
+      >
         <div className="mx-auto flex w-full max-w-6xl items-center gap-2">
           {navItems.map((item) => (
             <Link key={item.href} href={item.href} className={mobileNavLinkClass}>

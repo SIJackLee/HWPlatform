@@ -1,5 +1,18 @@
+ "use client";
+
+import { useFormStatus } from "react-dom";
+
 import { saveSubmissionFeedback } from "@/actions/teacher";
 import { Button } from "@/components/ui/button";
+
+function FeedbackSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending} aria-busy={pending}>
+      {pending ? "처리 중…" : "피드백 저장"}
+    </Button>
+  );
+}
 
 export function FeedbackForm({
   assignmentId,
@@ -32,7 +45,7 @@ export function FeedbackForm({
         />
       </div>
       <div className="flex items-center gap-3">
-        <Button type="submit">피드백 저장</Button>
+        <FeedbackSubmitButton />
         {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
         {!errorMessage && successMessage ? <p className="text-sm text-emerald-600">{successMessage}</p> : null}
       </div>
