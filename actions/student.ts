@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { getAuthState } from "@/lib/auth/session";
+import { getGuestAuthState } from "@/lib/auth/guest-auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function submitAssignmentAnswer(formData: FormData) {
@@ -19,42 +19,32 @@ export async function submitAssignmentAnswer(formData: FormData) {
     redirect(`/student/assignments/${assignmentId}?error=답안을 입력해 주세요.`);
   }
 
-  const { user, profile } = await getAuthState();
-  if (!user || profile?.role !== "student") {
-    redirect("/login?error=권한이 없습니다.");
+  const { user, profile } = await getGuestAuthState();
+  if (!user || !profile) {
+    redirect("/join?error=권한이 없습니다.");
   }
 
   const supabase = createServerSupabaseClient();
-  const targetResult = (await supabase
-    .from("assignment_targets")
-    .select("id")
-    .filter("assignment_id", "eq", assignmentId)
-    .filter("student_id", "eq", user.id)
+  const assignmentScopeResult = (await supabase
+    .from("assignments")
+    .select("id, class_id, question_type")
+    .eq("id", assignmentId)
+    .eq("class_id", profile.class_id)
     .maybeSingle()) as unknown as {
-    data: { id: string } | null;
+    data: { id: string; class_id: string; question_type: "subjective" | "objective" | "mixed" } | null;
     error: { message: string } | null;
   };
 
-  if (targetResult.error || !targetResult.data) {
+  if (assignmentScopeResult.error || !assignmentScopeResult.data) {
     redirect("/student/assignments?error=접근 권한이 없는 숙제입니다.");
   }
 
-  const assignmentResult = (await supabase
-    .from("assignments")
-    .select("id, question_type")
-    .filter("id", "eq", assignmentId)
-    .single()) as unknown as {
-    data: { id: string; question_type: "subjective" | "objective" | "mixed" } | null;
-    error: { message: string } | null;
-  };
-  if (assignmentResult.error || !assignmentResult.data) {
-    redirect("/student/assignments?error=숙제를 찾을 수 없습니다.");
-  }
+  const assignment = assignmentScopeResult.data;
 
   let finalAnswerText = answerText;
   let finalSelectedOptionIds: string[] = [];
   let finalIsCorrect: boolean | null = null;
-  if (assignmentResult.data.question_type === "objective") {
+  if (assignment.question_type === "objective") {
     if (selectedOptionIds.length === 0) {
       redirect(`/student/assignments/${assignmentId}?error=객관식 답안을 선택해 주세요.`);
     }
@@ -80,7 +70,7 @@ export async function submitAssignmentAnswer(formData: FormData) {
       correctOptionIds.length === selectedSorted.length &&
       correctOptionIds.every((id, idx) => id === selectedSorted[idx]);
     finalAnswerText = finalSelectedOptionIds.join(",");
-  } else if (assignmentResult.data.question_type === "mixed") {
+  } else if (assignment.question_type === "mixed") {
     // submissions.answer_text has NOT NULL + non-empty check constraint.
     // For mixed assignments, detailed answers are stored in submission_answers.
     finalAnswerText = "[mixed]";
@@ -93,7 +83,7 @@ export async function submitAssignmentAnswer(formData: FormData) {
     upsert: (
       values: {
         assignment_id: string;
-        student_id: string;
+        guest_student_id: string;
         answer_text: string;
         selected_option_ids: string[];
         is_correct: boolean | null;
@@ -106,14 +96,14 @@ export async function submitAssignmentAnswer(formData: FormData) {
   const { error } = await submissionsWriter.upsert(
     {
       assignment_id: assignmentId,
-      student_id: user.id,
+      guest_student_id: user.id,
       answer_text: finalAnswerText,
       selected_option_ids: finalSelectedOptionIds,
       is_correct: finalIsCorrect,
       submitted_at: new Date().toISOString(),
     },
     {
-      onConflict: "assignment_id,student_id",
+      onConflict: "assignment_id,guest_student_id",
     },
   );
 
@@ -121,7 +111,7 @@ export async function submitAssignmentAnswer(formData: FormData) {
     redirect(`/student/assignments/${assignmentId}?error=${encodeURIComponent(error.message)}`);
   }
 
-  if (assignmentResult.data.question_type === "mixed") {
+  if (assignment.question_type === "mixed") {
     type MixedAnswerInput = {
       question_id: string;
       question_type: "subjective" | "objective";
@@ -137,8 +127,8 @@ export async function submitAssignmentAnswer(formData: FormData) {
     const submissionIdResult = (await supabase
       .from("submissions")
       .select("id")
-      .filter("assignment_id", "eq", assignmentId)
-      .filter("student_id", "eq", user.id)
+      .eq("assignment_id", assignmentId)
+      .eq("guest_student_id", user.id)
       .single()) as unknown as {
       data: { id: string } | null;
       error: { message: string } | null;

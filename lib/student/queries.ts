@@ -14,42 +14,39 @@ import type {
 import type { Database } from "@/types/database";
 
 type AssignmentRow = Database["public"]["Tables"]["assignments"]["Row"];
-type AssignmentTargetRow = Database["public"]["Tables"]["assignment_targets"]["Row"];
 
 export async function getStudentAssignments(studentId: string): Promise<StudentAssignmentItem[]> {
   const supabase = createServerSupabaseClient();
-
-  const [{ data: targets, error: targetError }, { data: submissions, error: submissionError }] =
-    await Promise.all([
-      supabase.from("assignment_targets").select("assignment_id").filter("student_id", "eq", studentId),
-      supabase.from("submissions").select("*").filter("student_id", "eq", studentId),
-    ]);
-
-  if (targetError) throw targetError;
-  if (submissionError) throw submissionError;
-
-  const targetRows = (targets ?? []) as unknown as AssignmentTargetRow[];
-  const assignmentIds = targetRows.map((target) => target.assignment_id);
-  if (assignmentIds.length === 0) {
+  const guestResult = (await supabase
+    .from("guest_students")
+    .select("class_id")
+    .eq("id", studentId)
+    .is("revoked_at", null)
+    .maybeSingle()) as unknown as {
+    data: { class_id: string } | null;
+    error: { message: string } | null;
+  };
+  if (guestResult.error || !guestResult.data) {
     return [];
   }
 
-  const assignmentsResult = (await supabase
-    .from("assignments")
-    .select("*")
-    .in("id", assignmentIds)
-    .order("due_at", { ascending: true })) as unknown as {
-    data: AssignmentRow[] | null;
-    error: { message: string } | null;
-  };
+  const [{ data: assignmentRowsRaw, error: assignmentError }, { data: submissions, error: submissionError }] =
+    await Promise.all([
+      supabase
+        .from("assignments")
+        .select("*")
+        .eq("class_id", guestResult.data.class_id)
+        .order("due_at", { ascending: true }),
+      supabase.from("submissions").select("*").eq("guest_student_id", studentId),
+    ]);
 
-  if (assignmentsResult.error) {
-    throw assignmentsResult.error;
-  }
+  if (assignmentError) throw assignmentError;
+  if (submissionError) throw submissionError;
 
-  const assignmentRows = assignmentsResult.data ?? [];
+  const assignmentRows = (assignmentRowsRaw ?? []) as AssignmentRow[];
+  if (assignmentRows.length === 0) return [];
+
   const submissionRows = (submissions ?? []) as unknown as SubmissionRow[];
-
   const submissionMap = new Map<string, SubmissionRow>();
   submissionRows.forEach((submission) => {
     submissionMap.set(submission.assignment_id, submission);
@@ -82,33 +79,37 @@ export async function getStudentDashboardStats(studentId: string): Promise<Stude
 export async function getStudentAssignmentDetail(assignmentId: string, studentId: string): Promise<StudentAssignmentDetail> {
   const supabase = createServerSupabaseClient();
 
-  const targetResult = (await supabase
-    .from("assignment_targets")
-    .select("id")
-    .filter("assignment_id", "eq", assignmentId)
-    .filter("student_id", "eq", studentId)
+  const guestResult = (await supabase
+    .from("guest_students")
+    .select("class_id")
+    .eq("id", studentId)
+    .is("revoked_at", null)
     .maybeSingle()) as unknown as {
-    data: { id: string } | null;
+    data: { class_id: string } | null;
     error: { message: string } | null;
   };
-
-  if (targetResult.error) throw targetResult.error;
-  if (!targetResult.data) {
+  if (guestResult.error || !guestResult.data) {
     return { assignment: null, submission: null };
   }
 
-  const assignmentResult = (await supabase.from("assignments").select("*").filter("id", "eq", assignmentId).single()) as unknown as {
+  const assignmentResult = (await supabase
+    .from("assignments")
+    .select("*")
+    .eq("id", assignmentId)
+    .eq("class_id", guestResult.data.class_id)
+    .maybeSingle()) as unknown as {
     data: AssignmentRow | null;
     error: { message: string } | null;
   };
-
-  if (assignmentResult.error || !assignmentResult.data) throw assignmentResult.error;
+  if (assignmentResult.error || !assignmentResult.data) {
+    return { assignment: null, submission: null };
+  }
 
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
     .select("*")
-    .filter("assignment_id", "eq", assignmentId)
-    .filter("student_id", "eq", studentId)
+    .eq("assignment_id", assignmentId)
+    .eq("guest_student_id", studentId)
     .maybeSingle();
 
   if (submissionError) throw submissionError;

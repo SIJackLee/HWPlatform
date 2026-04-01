@@ -1,48 +1,15 @@
  "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 
 import { signIn } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 
 export function LoginForm({ errorMessage }: { errorMessage?: string }) {
-  const [loginType, setLoginType] = useState<"teacher" | "student">("teacher");
-
-  const tabClass =
-    "inline-flex h-11 flex-1 items-center justify-center rounded-md border text-sm font-medium";
-
   return (
     <form action={signIn} className="space-y-4">
-      <input type="hidden" name="loginType" value={loginType} />
-      <div className="space-y-2">
-        <p className="text-sm font-medium">로그인 유형</p>
-        <div className="flex gap-2 rounded-lg bg-muted/50 p-1">
-          <button
-            type="button"
-            className={`${tabClass} ${
-              loginType === "teacher"
-                ? "border-primary bg-background text-foreground"
-                : "border-transparent bg-transparent text-muted-foreground"
-            }`}
-            onClick={() => setLoginType("teacher")}
-          >
-            teacher
-          </button>
-          <button
-            type="button"
-            className={`${tabClass} ${
-              loginType === "student"
-                ? "border-primary bg-background text-foreground"
-                : "border-transparent bg-transparent text-muted-foreground"
-            }`}
-            onClick={() => setLoginType("student")}
-          >
-            student
-          </button>
-        </div>
-      </div>
-
-      <div className={`space-y-3 rounded-lg border p-3 ${loginType === "teacher" ? "block" : "hidden"}`}>
+      <input type="hidden" name="loginType" value="teacher" />
+      <div className="space-y-3 rounded-lg border p-3">
         <p className="text-sm font-medium">teacher 로그인</p>
         <div className="space-y-2">
           <label htmlFor="teacherLoginId" className="text-sm font-medium">
@@ -52,7 +19,7 @@ export function LoginForm({ errorMessage }: { errorMessage?: string }) {
             id="teacherLoginId"
             name="teacherLoginId"
             type="text"
-            required={loginType === "teacher"}
+            required
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             placeholder="teacher 로그인 아이디"
           />
@@ -65,42 +32,9 @@ export function LoginForm({ errorMessage }: { errorMessage?: string }) {
             id="teacherPassword"
             name="teacherPassword"
             type="password"
-            required={loginType === "teacher"}
+            required
             className="w-full rounded-md border bg-background px-3 py-2 text-sm"
             placeholder="********"
-          />
-        </div>
-      </div>
-
-      <div className={`space-y-3 rounded-lg border p-3 ${loginType === "student" ? "block" : "hidden"}`}>
-        <p className="text-sm font-medium">student 로그인</p>
-        <div className="space-y-2">
-          <label htmlFor="studentName" className="text-sm font-medium">
-            이름
-          </label>
-          <input
-            id="studentName"
-            name="studentName"
-            type="text"
-            required={loginType === "student"}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-            placeholder="학생 이름"
-          />
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="studentPhoneLast4" className="text-sm font-medium">
-            전화번호 뒤 4자리
-          </label>
-          <input
-            id="studentPhoneLast4"
-            name="studentPhoneLast4"
-            type="password"
-            maxLength={4}
-            inputMode="numeric"
-            pattern="[0-9]{4}"
-            required={loginType === "student"}
-            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-            placeholder="0000"
           />
         </div>
       </div>
@@ -115,9 +49,15 @@ export function LoginForm({ errorMessage }: { errorMessage?: string }) {
         로그인
       </Button>
 
-      <p className="text-center text-xs text-muted-foreground">
-        계정 생성은 운영자가 사전 등록합니다. 신규 계정이 필요하면 운영자에게 요청해 주세요.
-      </p>
+      <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-center">
+        <p className="text-xs text-muted-foreground">학생은 계정 로그인 대신 초대코드로 입장합니다.</p>
+        <Link
+          href="/join"
+          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted"
+        >
+          학생 초대코드로 입장하기
+        </Link>
+      </div>
     </form>
   );
 }

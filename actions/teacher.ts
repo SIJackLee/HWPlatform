@@ -21,17 +21,14 @@ function friendlyTeacherImageTableError(raw: string): string {
 }
 
 export async function createAssignment(formData: FormData) {
+  const classId = String(formData.get("classId") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const dueAt = String(formData.get("dueAt") ?? "").trim();
   const questionType = "mixed" as const;
   const mixedQuestionsRaw = String(formData.get("mixedQuestions") ?? "[]");
-  const studentIds = formData
-    .getAll("studentIds")
-    .map((value) => String(value).trim())
-    .filter((value) => value.length > 0);
 
-  if (!title || !description || !dueAt || studentIds.length === 0) {
+  if (!classId || !title || !description || !dueAt) {
     redirect("/teacher/assignments/new?error=모든 필드를 입력해 주세요.");
   }
 
@@ -49,6 +46,7 @@ export async function createAssignment(formData: FormData) {
   type MixedQuestionInput = {
     type: "subjective" | "objective";
     prompt: string;
+    model_answer?: string | null;
     sort_order: number;
     options: Array<{ option_text: string; is_correct: boolean; sort_order: number }>;
     library_asset_ids?: string[];
@@ -65,7 +63,6 @@ export async function createAssignment(formData: FormData) {
     redirect("/teacher/assignments/new?error=혼합형 문항을 1개 이상 추가해 주세요.");
   }
   const invalidMixed = mixedQuestions.some((question) => {
-    if (!question.prompt?.trim()) return true;
     if (question.type === "objective") {
       const validOptions = (question.options ?? []).filter((option) => option.option_text?.trim().length > 0);
       const correctCount = validOptions.filter((option) => option.is_correct).length;
@@ -75,7 +72,6 @@ export async function createAssignment(formData: FormData) {
   });
   if (invalidMixed) {
     const invalidIndex = mixedQuestions.findIndex((question) => {
-      if (!question.prompt?.trim()) return true;
       if (question.type === "objective") {
         const validOptions = (question.options ?? []).filter((option) => option.option_text?.trim().length > 0);
         const correctCount = validOptions.filter((option) => option.is_correct).length;
@@ -92,30 +88,24 @@ export async function createAssignment(formData: FormData) {
   }
 
   const supabase = createServerSupabaseClient();
-
-  const studentsCheckResult = (await supabase
-    .from("profiles")
+  const classCheck = (await supabase
+    .from("classes")
     .select("id")
-    .filter("role", "eq", "student")
-    .filter("is_active", "eq", true)
-    .in("id", studentIds)) as unknown as {
-    data: Array<{ id: string }> | null;
+    .eq("id", classId)
+    .eq("teacher_id", user.id)
+    .maybeSingle()) as unknown as {
+    data: { id: string } | null;
     error: { message: string } | null;
   };
-
-  if (studentsCheckResult.error) {
-    redirect(`/teacher/assignments/new?error=${encodeURIComponent(studentsCheckResult.error.message)}`);
-  }
-
-  const validStudentIds = new Set((studentsCheckResult.data ?? []).map((student) => student.id));
-  if (validStudentIds.size === 0) {
-    redirect("/teacher/assignments/new?error=유효한 student 대상을 1명 이상 선택해 주세요.");
+  if (classCheck.error || !classCheck.data) {
+    redirect("/teacher/assignments/new?error=반 권한이 없습니다.");
   }
 
   // WARNING: Supabase generic mismatch workaround for this repo's manual DB types.
   const assignmentsWriter = supabase.from("assignments") as unknown as {
     insert: (values: {
       teacher_id: string;
+      class_id: string;
       title: string;
       description: string;
       question_type: "subjective" | "objective" | "mixed";
@@ -129,6 +119,7 @@ export async function createAssignment(formData: FormData) {
 
   const { data, error } = await assignmentsWriter.insert({
       teacher_id: user.id,
+      class_id: classId,
       title,
       description,
       question_type: questionType,
@@ -139,34 +130,12 @@ export async function createAssignment(formData: FormData) {
     redirect(`/teacher/assignments/new?error=${encodeURIComponent(error?.message ?? "생성에 실패했습니다.")}`);
   }
 
-  const targetsWriter = supabase.from("assignment_targets") as unknown as {
-    insert: (values: Array<{ assignment_id: string; student_id: string }>) => Promise<{
-      error: { message: string } | null;
-    }>;
-  };
-
-  const targetRows = Array.from(validStudentIds).map((studentId) => ({
-    assignment_id: data.id,
-    student_id: studentId,
-  }));
-  const targetInsertResult = await targetsWriter.insert(targetRows);
-
-  if (targetInsertResult.error) {
-    const assignmentsDeleteWriter = supabase.from("assignments") as unknown as {
-      delete: () => {
-        filter: (field: string, op: string, value: string) => Promise<{ error: { message: string } | null }>;
-      };
-    };
-
-    await assignmentsDeleteWriter.delete().filter("id", "eq", data.id);
-    redirect(`/teacher/assignments/new?error=${encodeURIComponent(targetInsertResult.error.message)}`);
-  }
-
   const questionsWriter = supabase.from("assignment_questions") as unknown as {
     insert: (values: Array<{
       assignment_id: string;
       question_type: "subjective" | "objective";
       prompt: string;
+      model_answer: string | null;
       sort_order: number;
     }>) => {
       select: (fields: string) => Promise<{
@@ -178,7 +147,8 @@ export async function createAssignment(formData: FormData) {
   const questionsPayload = mixedQuestions.map((question, idx) => ({
     assignment_id: data.id,
     question_type: question.type,
-    prompt: question.prompt.trim(),
+    prompt: question.prompt.trim() || `문항 ${idx + 1}`,
+    model_answer: question.type === "subjective" ? String(question.model_answer ?? "").trim() || null : null,
     sort_order: idx + 1,
   }));
   const questionsInsert = await questionsWriter.insert(questionsPayload).select("id, sort_order");
@@ -324,16 +294,13 @@ export async function createAssignment(formData: FormData) {
 
 export async function updateAssignment(formData: FormData) {
   const assignmentId = String(formData.get("assignmentId") ?? "").trim();
+  const classId = String(formData.get("classId") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const dueAt = String(formData.get("dueAt") ?? "").trim();
   const mixedQuestionsRaw = String(formData.get("mixedQuestions") ?? "[]");
-  const studentIds = formData
-    .getAll("studentIds")
-    .map((value) => String(value).trim())
-    .filter((value) => value.length > 0);
 
-  if (!assignmentId || !title || !description || !dueAt || studentIds.length === 0) {
+  if (!assignmentId || !classId || !title || !description || !dueAt) {
     redirect(`/teacher/assignments/${assignmentId || ""}/edit?error=모든 필드를 입력해 주세요.`);
   }
 
@@ -348,6 +315,7 @@ export async function updateAssignment(formData: FormData) {
   type MixedQuestionInput = {
     type: "subjective" | "objective";
     prompt: string;
+    model_answer?: string | null;
     sort_order: number;
     options: Array<{ option_text: string; is_correct: boolean; sort_order: number }>;
     library_asset_ids?: string[];
@@ -365,7 +333,6 @@ export async function updateAssignment(formData: FormData) {
   }
 
   const invalidMixed = mixedQuestions.findIndex((question) => {
-    if (!question.prompt?.trim()) return true;
     if (question.type === "objective") {
       const validOptions = (question.options ?? []).filter((option) => option.option_text?.trim().length > 0);
       const correctCount = validOptions.filter((option) => option.is_correct).length;
@@ -387,15 +354,18 @@ export async function updateAssignment(formData: FormData) {
   const supabase = createServerSupabaseClient();
   const assignmentResult = (await supabase
     .from("assignments")
-    .select("id")
+    .select("id, class_id")
     .eq("id", assignmentId)
     .eq("teacher_id", user.id)
     .maybeSingle()) as unknown as {
-    data: { id: string } | null;
+    data: { id: string; class_id: string } | null;
     error: { message: string } | null;
   };
   if (assignmentResult.error || !assignmentResult.data) {
     redirect("/teacher/assignments?error=수정 권한이 없습니다.");
+  }
+  if (assignmentResult.data.class_id !== classId) {
+    redirect(`/teacher/assignments/${assignmentId}/edit?error=반 정보가 일치하지 않습니다.`);
   }
 
   const submissionsCountResult = (await supabase
@@ -412,23 +382,6 @@ export async function updateAssignment(formData: FormData) {
     redirect(`/teacher/assignments/${assignmentId}/edit?error=이미 제출이 존재하여 수정할 수 없습니다.`);
   }
 
-  const studentsCheckResult = (await supabase
-    .from("profiles")
-    .select("id")
-    .filter("role", "eq", "student")
-    .filter("is_active", "eq", true)
-    .in("id", studentIds)) as unknown as {
-    data: Array<{ id: string }> | null;
-    error: { message: string } | null;
-  };
-  if (studentsCheckResult.error) {
-    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(studentsCheckResult.error.message)}`);
-  }
-  const validStudentIds = new Set((studentsCheckResult.data ?? []).map((student) => student.id));
-  if (validStudentIds.size === 0) {
-    redirect(`/teacher/assignments/${assignmentId}/edit?error=유효한 student 대상을 1명 이상 선택해 주세요.`);
-  }
-
   const assignmentUpdateResult = (await supabase
     .from("assignments")
     .update({
@@ -440,14 +393,6 @@ export async function updateAssignment(formData: FormData) {
     .eq("teacher_id", user.id)) as unknown as { error: { message: string } | null };
   if (assignmentUpdateResult.error) {
     redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(assignmentUpdateResult.error.message)}`);
-  }
-
-  await supabase.from("assignment_targets").delete().eq("assignment_id", assignmentId);
-  const targetInsert = (await supabase.from("assignment_targets").insert(
-    Array.from(validStudentIds).map((studentId) => ({ assignment_id: assignmentId, student_id: studentId })),
-  )) as unknown as { error: { message: string } | null };
-  if (targetInsert.error) {
-    redirect(`/teacher/assignments/${assignmentId}/edit?error=${encodeURIComponent(targetInsert.error.message)}`);
   }
 
   const oldQuestionsResult = (await supabase
@@ -471,6 +416,7 @@ export async function updateAssignment(formData: FormData) {
       assignment_id: string;
       question_type: "subjective" | "objective";
       prompt: string;
+      model_answer: string | null;
       sort_order: number;
     }>) => {
       select: (fields: string) => Promise<{
@@ -484,7 +430,8 @@ export async function updateAssignment(formData: FormData) {
       mixedQuestions.map((question, idx) => ({
         assignment_id: assignmentId,
         question_type: question.type,
-        prompt: question.prompt.trim(),
+        prompt: question.prompt.trim() || `문항 ${idx + 1}`,
+        model_answer: question.type === "subjective" ? String(question.model_answer ?? "").trim() || null : null,
         sort_order: idx + 1,
       })),
     )
@@ -746,6 +693,7 @@ export async function saveSubmissionFeedback(formData: FormData) {
 
 export async function deleteAssignment(formData: FormData) {
   const assignmentId = String(formData.get("assignmentId") ?? "").trim();
+  const returnTo = String(formData.get("returnTo") ?? "").trim();
   if (!assignmentId) {
     redirect("/teacher/assignments?error=삭제할 숙제를 찾을 수 없습니다.");
   }
@@ -766,12 +714,19 @@ export async function deleteAssignment(formData: FormData) {
 
   const { error } = await assignmentsDeleteWriter.delete().eq("id", assignmentId).eq("teacher_id", user.id);
   if (error) {
-    redirect(`/teacher/assignments?error=${encodeURIComponent(error.message)}`);
+    const errorTarget =
+      returnTo.startsWith("/teacher/") && !returnTo.startsWith("//") ? returnTo : "/teacher/assignments";
+    const separator = errorTarget.includes("?") ? "&" : "?";
+    redirect(`${errorTarget}${separator}error=${encodeURIComponent(error.message)}`);
   }
 
   revalidatePath("/teacher/dashboard");
   revalidatePath("/teacher/assignments");
   revalidatePath("/student/dashboard");
   revalidatePath("/student/assignments");
+  if (returnTo.startsWith("/teacher/") && !returnTo.startsWith("//")) {
+    revalidatePath(returnTo.split("?")[0] ?? returnTo);
+    redirect(returnTo);
+  }
   redirect("/teacher/assignments");
 }

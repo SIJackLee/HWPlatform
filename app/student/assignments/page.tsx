@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/common/page-header";
 import { AssignmentListTable } from "@/components/student/assignment-list-table";
-import { getAuthState } from "@/lib/auth/session";
+import { getGuestAuthState } from "@/lib/auth/guest-auth";
 import { getStudentAssignments } from "@/lib/student/queries";
 
 type AssignmentFilter = "all" | "in_progress" | "submitted";
@@ -23,8 +23,8 @@ export default async function StudentAssignmentsPage({
 }: {
   searchParams: Promise<{ status?: AssignmentFilter; sort?: AssignmentSort }>;
 }) {
-  const { user, profile } = await getAuthState();
-  if (!user || profile?.role !== "student") {
+  const { user, profile } = await getGuestAuthState();
+  if (!user || !profile) {
     throw new Error("권한이 없는 접근입니다.");
   }
 

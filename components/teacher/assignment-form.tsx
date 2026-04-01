@@ -8,17 +8,13 @@ import { createAssignment, deleteTeacherLibraryImage, uploadTeacherLibraryImage 
 import { Button } from "@/components/ui/button";
 import type { TeacherLibraryAssetPreview } from "@/lib/teacher/library-queries";
 
-interface StudentOption {
-  id: string;
-  name: string;
-}
-
 type QuestionType = "subjective" | "objective";
 
 interface MixedQuestionDraft {
   id: string;
   type: QuestionType;
   prompt: string;
+  modelAnswer: string;
   options: string[];
   correctOptionIndexes: number[];
   collapsed?: boolean;
@@ -31,6 +27,7 @@ interface MixedQuestionDraft {
 export interface AssignmentFormInitialQuestion {
   type: QuestionType;
   prompt: string;
+  modelAnswer: string;
   options: string[];
   correctOptionIndexes: number[];
   existingImageUrls: string[];
@@ -38,10 +35,10 @@ export interface AssignmentFormInitialQuestion {
 
 export interface AssignmentFormInitialData {
   assignmentId: string;
+  classId: string;
   title: string;
   description: string;
   dueAt: string;
-  targetStudentIds: string[];
   mixedQuestions: AssignmentFormInitialQuestion[];
 }
 
@@ -69,6 +66,7 @@ function normalizeDraftQuestions(raw: unknown): MixedQuestionDraft[] {
       id: typeof q.id === "string" ? q.id : crypto.randomUUID(),
       type: q.type === "objective" ? "objective" : "subjective",
       prompt: typeof q.prompt === "string" ? q.prompt : "",
+      modelAnswer: typeof q.modelAnswer === "string" ? q.modelAnswer : "",
       options: Array.isArray(q.options) ? q.options.map((o) => String(o)) : ["", ""],
       correctOptionIndexes: Array.isArray(q.correctOptionIndexes)
         ? q.correctOptionIndexes.filter((n): n is number => typeof n === "number")
@@ -95,15 +93,15 @@ function AssignmentSubmitButton({ label }: { label: string }) {
 
 export function AssignmentForm({
   errorMessage,
-  students,
   libraryAssets,
+  classId,
   mode = "create",
   submitAction = createAssignment,
   initialData,
 }: {
   errorMessage?: string;
-  students: StudentOption[];
   libraryAssets: TeacherLibraryAssetPreview[];
+  classId: string;
   mode?: "create" | "edit";
   submitAction?: AssignmentSubmitAction;
   initialData?: AssignmentFormInitialData;
@@ -134,6 +132,7 @@ export function AssignmentForm({
         id: crypto.randomUUID(),
         type: question.type,
         prompt: question.prompt,
+        modelAnswer: question.modelAnswer,
         options: question.options.length > 0 ? question.options : ["", ""],
         correctOptionIndexes: question.correctOptionIndexes,
         collapsed: false,
@@ -160,6 +159,7 @@ export function AssignmentForm({
         id: crypto.randomUUID(),
         type: "subjective",
         prompt: "",
+        modelAnswer: "",
         options: ["", ""],
         correctOptionIndexes: [],
         collapsed: false,
@@ -174,6 +174,7 @@ export function AssignmentForm({
   const [librarySuccess, setLibrarySuccess] = useState<string | null>(null);
   const [librarySelectedFileLabel, setLibrarySelectedFileLabel] = useState<string>("");
   const [showLibraryAssets, setShowLibraryAssets] = useState(true);
+  const [showLibraryHelp, setShowLibraryHelp] = useState(false);
   const [showGuideDetails, setShowGuideDetails] = useState(false);
   const [pickerTargetId, setPickerTargetId] = useState<string | null>(null);
   const [pickerOrder, setPickerOrder] = useState<string[]>([]);
@@ -188,6 +189,7 @@ export function AssignmentForm({
     mixedQuestions.map((question, index) => ({
       type: question.type,
       prompt: question.prompt.trim(),
+      model_answer: question.type === "subjective" ? question.modelAnswer.trim() : null,
       sort_order: index + 1,
       library_asset_ids: question.libraryAssetIds,
       existing_image_urls: question.existingImageUrls,
@@ -206,15 +208,15 @@ export function AssignmentForm({
   }
 
   const completionText = useMemo(() => {
-    const done = mixedQuestions.filter((q) => q.prompt.trim().length > 0).length;
+    const done = mixedQuestions.filter((q) => isQuestionComplete(q)).length;
     return `${done}/${mixedQuestions.length} 문항 입력`;
   }, [mixedQuestions]);
   const remainingCount = useMemo(
-    () => mixedQuestions.filter((q) => q.prompt.trim().length === 0).length,
+    () => mixedQuestions.filter((q) => !isQuestionComplete(q)).length,
     [mixedQuestions],
   );
   const firstIncompleteQuestion = useMemo(
-    () => mixedQuestions.find((q) => q.prompt.trim().length === 0),
+    () => mixedQuestions.find((q) => !isQuestionComplete(q)),
     [mixedQuestions],
   );
   const incompleteQuestionsCount = useMemo(
@@ -223,7 +225,6 @@ export function AssignmentForm({
   );
 
   function isQuestionComplete(question: MixedQuestionDraft): boolean {
-    if (!question.prompt.trim()) return false;
     if (question.type !== "objective") return true;
     const validOptions = question.options.filter((option) => option.trim().length > 0);
     return validOptions.length >= 2 && question.correctOptionIndexes.length >= 1;
@@ -405,7 +406,6 @@ export function AssignmentForm({
         }
 
         const invalidIndex = mixedQuestions.findIndex((question) => {
-          if (!question.prompt.trim()) return true;
           if (question.type === "objective") {
             const validOptions = question.options.filter((option) => option.trim().length > 0);
             return validOptions.length < 2 || question.correctOptionIndexes.length < 1;
@@ -421,6 +421,7 @@ export function AssignmentForm({
       }}
     >
       {isEditMode && initialData ? <input type="hidden" name="assignmentId" value={initialData.assignmentId} /> : null}
+      <input type="hidden" name="classId" value={initialData?.classId ?? classId} />
       <input type="hidden" name="mixedQuestions" value={mixedQuestionsPayload} />
       <input type="hidden" name="questionType" value="mixed" />
 
@@ -505,10 +506,19 @@ export function AssignmentForm({
             <p className="text-base font-semibold">3. 이미지</p>
             <p className="text-sm font-medium">이미지 라이브러리</p>
           </div>
+          <button
+            type="button"
+            className="text-xs underline underline-offset-2 text-muted-foreground"
+            onClick={() => setShowLibraryHelp((prev) => !prev)}
+          >
+            {showLibraryHelp ? "설명 접기" : "설명 보기"}
+          </button>
+        </div>
+        {showLibraryHelp ? (
           <p className="text-xs text-muted-foreground">
             미리 올려 두고 아래 각 문항에서 선택해 넣을 수 있습니다. 숙제 저장 시 문항별로 복사되어 저장됩니다.
           </p>
-        </div>
+        ) : null}
         <div
           className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-muted-foreground/25 bg-muted/10 p-3"
           onDragOver={(e) => {
@@ -647,6 +657,7 @@ export function AssignmentForm({
                     id: newId,
                     type: "subjective",
                     prompt: "",
+                    modelAnswer: "",
                     options: ["", ""],
                     correctOptionIndexes: [],
                     collapsed: true,
@@ -764,7 +775,6 @@ export function AssignmentForm({
                     </button>
                   </div>
                   <textarea
-                    required
                     rows={2}
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     placeholder="문항 내용을 입력하세요."
@@ -776,6 +786,20 @@ export function AssignmentForm({
                       updateMixedQuestion(question.id, (prev) => ({ ...prev, prompt: event.target.value }))
                     }
                   />
+                  {question.type === "subjective" ? (
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">모범답안 (선택)</label>
+                      <textarea
+                        rows={3}
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        placeholder="주관식 문항의 모범답안을 입력하세요."
+                        value={question.modelAnswer}
+                        onChange={(event) =>
+                          updateMixedQuestion(question.id, (prev) => ({ ...prev, modelAnswer: event.target.value }))
+                        }
+                      />
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <p className="text-sm font-medium">문항 이미지</p>
                     {question.existingImageUrls.length > 0 ? (
@@ -935,7 +959,7 @@ export function AssignmentForm({
       </section>
 
       <section className="space-y-4 rounded-lg border p-4">
-        <h2 className="text-base font-semibold">4. 일정 및 대상</h2>
+        <h2 className="text-base font-semibold">4. 일정</h2>
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label htmlFor="dueAt" className="text-sm font-medium">
@@ -967,30 +991,6 @@ export function AssignmentForm({
             className="w-full rounded-md border bg-background px-3 py-2 text-base md:text-sm"
             defaultValue={initialData?.dueAt ?? ""}
           />
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-sm font-medium">대상 학생 선택 (최소 1명)</p>
-          {students.length === 0 ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              등록된 student 계정이 없습니다. 먼저 student 계정을 생성해 주세요.
-            </p>
-          ) : (
-            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border p-3">
-              {students.map((student) => (
-                <label key={student.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="studentIds"
-                    value={student.id}
-                    className="h-4 w-4"
-                    defaultChecked={initialData?.targetStudentIds.includes(student.id) ?? false}
-                  />
-                  <span>{student.name}</span>
-                </label>
-              ))}
-            </div>
-          )}
         </div>
       </section>
 

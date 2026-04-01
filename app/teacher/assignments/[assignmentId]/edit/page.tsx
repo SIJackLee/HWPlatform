@@ -4,7 +4,6 @@ import { AssignmentForm } from "@/components/teacher/assignment-form";
 import { getAuthState } from "@/lib/auth/session";
 import { getTeacherImageLibraryForForm } from "@/lib/teacher/library-queries";
 import { getTeacherAssignmentForEdit } from "@/lib/teacher/queries";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function toDatetimeLocalValue(iso: string): string {
   const d = new Date(iso);
@@ -27,20 +26,6 @@ export default async function TeacherAssignmentEditPage({
     throw new Error("권한이 없는 접근입니다.");
   }
 
-  const supabase = createServerSupabaseClient();
-  const studentsResult = (await supabase
-    .from("profiles")
-    .select("id, name")
-    .eq("role", "student")
-    .eq("is_active", true)
-    .order("name", { ascending: true })) as unknown as {
-    data: Array<{ id: string; name: string }> | null;
-    error: { message: string } | null;
-  };
-  if (studentsResult.error) {
-    throw new Error("학생 목록을 불러오지 못했습니다.");
-  }
-
   const [libraryAssets, editData] = await Promise.all([
     getTeacherImageLibraryForForm(user.id),
     getTeacherAssignmentForEdit(assignmentId, user.id),
@@ -56,7 +41,7 @@ export default async function TeacherAssignmentEditPage({
         description={
           editData.submissionCount > 0
             ? "이미 제출된 숙제는 수정할 수 없습니다."
-            : "제목, 문항, 이미지, 대상 학생 정보를 수정할 수 있습니다."
+            : "제목, 문항, 이미지 정보를 수정할 수 있습니다."
         }
       />
       <div className="max-w-2xl rounded-lg border p-4">
@@ -64,14 +49,14 @@ export default async function TeacherAssignmentEditPage({
           mode="edit"
           submitAction={updateAssignment}
           errorMessage={query.error}
-          students={studentsResult.data ?? []}
           libraryAssets={libraryAssets}
+          classId={editData.assignment.class_id}
           initialData={{
             assignmentId: editData.assignment.id,
+            classId: editData.assignment.class_id,
             title: editData.assignment.title,
             description: editData.assignment.description,
             dueAt: toDatetimeLocalValue(editData.assignment.due_at),
-            targetStudentIds: editData.targetStudentIds,
             mixedQuestions: editData.questions,
           }}
         />

@@ -1,13 +1,15 @@
+import Link from "next/link";
+
 import { AssignmentForm } from "@/components/teacher/assignment-form";
 import { PageHeader } from "@/components/common/page-header";
+import { getTeacherClasses } from "@/lib/teacher/class-queries";
 import { getTeacherImageLibraryForForm } from "@/lib/teacher/library-queries";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getAuthState } from "@/lib/auth/session";
 
 export default async function TeacherAssignmentNewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; classId?: string }>;
 }) {
   const params = await searchParams;
   const { user, profile } = await getAuthState();
@@ -15,31 +17,32 @@ export default async function TeacherAssignmentNewPage({
     throw new Error("권한이 없는 접근입니다.");
   }
 
-  const supabase = createServerSupabaseClient();
-  const studentsResult = (await supabase
-    .from("profiles")
-    .select("id, name")
-    .filter("role", "eq", "student")
-    .filter("is_active", "eq", true)
-    .order("name", { ascending: true })) as unknown as {
-    data: Array<{ id: string; name: string }> | null;
-    error: { message: string } | null;
-  };
-
-  if (studentsResult.error) {
-    throw new Error("학생 목록을 불러오지 못했습니다.");
+  const classes = await getTeacherClasses(user.id);
+  if (classes.length === 0) {
+    return (
+      <section className="space-y-4">
+        <PageHeader title="숙제 등록" description="먼저 반을 만들어 주세요." />
+        <Link
+          href="/teacher/classes"
+          className="inline-flex h-11 items-center justify-center rounded-md border px-3 text-sm"
+        >
+          반 만들러 가기
+        </Link>
+      </section>
+    );
   }
 
   const libraryAssets = await getTeacherImageLibraryForForm(user.id);
+  const selectedClassId = classes.some((row) => row.id === params.classId) ? (params.classId as string) : classes[0].id;
 
   return (
     <section className="space-y-4">
-      <PageHeader title="숙제 등록" description="혼합형(주관식/객관식) 문항을 구성하고 마감일, 대상 학생과 함께 숙제를 등록합니다." />
+      <PageHeader title="숙제 등록" />
       <div className="max-w-2xl rounded-lg border p-4">
         <AssignmentForm
           errorMessage={params.error}
-          students={studentsResult.data ?? []}
           libraryAssets={libraryAssets}
+          classId={selectedClassId}
         />
       </div>
     </section>

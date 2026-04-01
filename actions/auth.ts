@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { createAppSession, clearAppSession } from "@/lib/auth/custom-session";
+import { clearGuestSession } from "@/lib/auth/guest-session";
 import { verifySecret } from "@/lib/auth/password";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/auth";
@@ -69,71 +70,7 @@ export async function signIn(formData: FormData) {
   }
 
   if (loginType === "student") {
-    const name = String(formData.get("studentName") ?? "").trim();
-    const phoneLast4 = String(formData.get("studentPhoneLast4") ?? "").trim();
-    if (!name || !/^\d{4}$/.test(phoneLast4)) {
-      failLogin("이름과 전화번호 뒤 4자리를 정확히 입력해 주세요.");
-    }
-
-    const profileCandidatesResult = (await supabase
-      .from("profiles")
-      .select("id, role, name, is_active")
-      .filter("role", "eq", "student")
-      .filter("name", "eq", name)
-      .filter("is_active", "eq", true)) as unknown as {
-      data: Array<{ id: string; role: UserRole; name: string; is_active: boolean }> | null;
-      error: { message: string } | null;
-    };
-
-    if (profileCandidatesResult.error) {
-      failLogin("로그인 중 오류가 발생했습니다.");
-    }
-
-    const profileCandidates = profileCandidatesResult.data ?? [];
-    if (profileCandidates.length === 0) {
-      failLogin("계정을 찾을 수 없습니다.");
-    }
-
-    const profileIds = profileCandidates.map((profile) => profile.id);
-    const credentialsResult = (await supabase
-      .from("account_credentials")
-      .select("profile_id, student_phone_last4_hash, is_active")
-      .filter("role", "eq", "student")
-      .filter("is_active", "eq", true)
-      .in("profile_id", profileIds)) as unknown as {
-      data: Array<{ profile_id: string; student_phone_last4_hash: string | null; is_active: boolean }> | null;
-      error: { message: string } | null;
-    };
-
-    if (credentialsResult.error) {
-      failLogin("로그인 중 오류가 발생했습니다.");
-    }
-
-    const matchedProfiles: Array<{ id: string; role: UserRole; name: string }> = [];
-    for (const profile of profileCandidates) {
-      const credential = (credentialsResult.data ?? []).find((item) => item.profile_id === profile.id);
-      if (!credential?.student_phone_last4_hash) continue;
-      // IMPORTANT: phone_last4 is compared only on server against hash.
-      const isMatch = await verifySecret(phoneLast4, credential.student_phone_last4_hash);
-      if (isMatch) {
-        matchedProfiles.push(profile);
-      }
-    }
-
-    if (matchedProfiles.length === 0) {
-      failLogin("계정을 찾을 수 없습니다.");
-    }
-    if (matchedProfiles.length > 1) {
-      failLogin("동명이인 계정이 있어 운영자 확인이 필요합니다.");
-    }
-
-    const matched = matchedProfiles[0];
-    await createAppSession({
-      profileId: matched.id,
-      role: matched.role,
-      name: matched.name,
-    });
-    redirect(getRoleHomePath(matched.role));
+    redirect("/join");
   }
 
   failLogin("유효하지 않은 로그인 유형입니다.");
@@ -141,5 +78,6 @@ export async function signIn(formData: FormData) {
 
 export async function signOut() {
   await clearAppSession();
+  await clearGuestSession();
   redirect("/login");
 }

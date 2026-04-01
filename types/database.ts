@@ -73,10 +73,159 @@ export interface Database {
           },
         ];
       };
+      classes: {
+        Row: {
+          id: string;
+          teacher_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          teacher_id: string;
+          name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          teacher_id?: string;
+          name?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "classes_teacher_id_fkey";
+            columns: ["teacher_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      class_invite_codes: {
+        Row: {
+          id: string;
+          class_id: string;
+          code_hash: string;
+          display_code: string | null;
+          expires_at: string;
+          max_uses: number | null;
+          used_count: number;
+          revoked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          class_id: string;
+          code_hash: string;
+          display_code?: string | null;
+          expires_at: string;
+          max_uses?: number | null;
+          used_count?: number;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          class_id?: string;
+          code_hash?: string;
+          display_code?: string | null;
+          expires_at?: string;
+          max_uses?: number | null;
+          used_count?: number;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "class_invite_codes_class_id_fkey";
+            columns: ["class_id"];
+            referencedRelation: "classes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_students: {
+        Row: {
+          id: string;
+          class_id: string;
+          name: string;
+          name_norm: string;
+          pin4_hmac: string;
+          created_at: string;
+          last_seen_at: string | null;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          class_id: string;
+          name: string;
+          name_norm: string;
+          pin4_hmac: string;
+          created_at?: string;
+          last_seen_at?: string | null;
+          revoked_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          class_id?: string;
+          name?: string;
+          name_norm?: string;
+          pin4_hmac?: string;
+          created_at?: string;
+          last_seen_at?: string | null;
+          revoked_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_students_class_id_fkey";
+            columns: ["class_id"];
+            referencedRelation: "classes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      guest_sessions: {
+        Row: {
+          id: string;
+          guest_student_id: string;
+          session_token_hash: string;
+          expires_at: string;
+          revoked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          guest_student_id: string;
+          session_token_hash: string;
+          expires_at: string;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          guest_student_id?: string;
+          session_token_hash?: string;
+          expires_at?: string;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "guest_sessions_guest_student_id_fkey";
+            columns: ["guest_student_id"];
+            referencedRelation: "guest_students";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       assignments: {
         Row: {
           id: string;
           teacher_id: string;
+          class_id: string;
           title: string;
           description: string;
           question_type: "subjective" | "objective" | "mixed";
@@ -87,6 +236,7 @@ export interface Database {
         Insert: {
           id?: string;
           teacher_id: string;
+          class_id: string;
           title: string;
           description: string;
           question_type?: "subjective" | "objective" | "mixed";
@@ -97,6 +247,7 @@ export interface Database {
         Update: {
           id?: string;
           teacher_id?: string;
+          class_id?: string;
           title?: string;
           description?: string;
           question_type?: "subjective" | "objective" | "mixed";
@@ -105,6 +256,12 @@ export interface Database {
           updated_at?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "assignments_class_id_fkey";
+            columns: ["class_id"];
+            referencedRelation: "classes";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "assignments_teacher_id_fkey";
             columns: ["teacher_id"];
@@ -151,7 +308,8 @@ export interface Database {
         Row: {
           id: string;
           assignment_id: string;
-          student_id: string;
+          student_id: string | null;
+          guest_student_id: string;
           answer_text: string;
           selected_option_ids: string[];
           is_correct: boolean | null;
@@ -164,7 +322,8 @@ export interface Database {
         Insert: {
           id?: string;
           assignment_id: string;
-          student_id: string;
+          student_id?: string | null;
+          guest_student_id: string;
           answer_text: string;
           selected_option_ids?: string[];
           is_correct?: boolean | null;
@@ -177,7 +336,8 @@ export interface Database {
         Update: {
           id?: string;
           assignment_id?: string;
-          student_id?: string;
+          student_id?: string | null;
+          guest_student_id?: string;
           answer_text?: string;
           selected_option_ids?: string[];
           is_correct?: boolean | null;
@@ -195,9 +355,9 @@ export interface Database {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "submissions_student_id_fkey";
-            columns: ["student_id"];
-            referencedRelation: "profiles";
+            foreignKeyName: "submissions_guest_student_id_fkey";
+            columns: ["guest_student_id"];
+            referencedRelation: "guest_students";
             referencedColumns: ["id"];
           },
         ];
@@ -307,6 +467,7 @@ export interface Database {
           assignment_id: string;
           question_type: "subjective" | "objective";
           prompt: string;
+          model_answer: string | null;
           image_url: string | null;
           sort_order: number;
           created_at: string;
@@ -317,6 +478,7 @@ export interface Database {
           assignment_id: string;
           question_type: "subjective" | "objective";
           prompt: string;
+          model_answer?: string | null;
           image_url?: string | null;
           sort_order?: number;
           created_at?: string;
@@ -327,6 +489,7 @@ export interface Database {
           assignment_id?: string;
           question_type?: "subjective" | "objective";
           prompt?: string;
+          model_answer?: string | null;
           image_url?: string | null;
           sort_order?: number;
           created_at?: string;

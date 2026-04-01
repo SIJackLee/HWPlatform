@@ -32,7 +32,7 @@ export default async function TeacherSubmissionDetailPage({
     <section className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader
-          title={`제출 상세 - ${submission.profiles?.name ?? "학생"}`}
+          title={`제출 상세 - ${submission.guest_students?.name ?? "학생"}`}
           description="학생 답안을 확인하고 피드백을 작성하세요."
         />
         <Link href={`/teacher/assignments/${assignmentId}`} className={outlineLinkClass}>
@@ -102,7 +102,49 @@ export default async function TeacherSubmissionDetailPage({
       ) : (
         <div className="space-y-2 rounded-lg border p-4">
           <p className="text-sm font-medium">학생 답안</p>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{submission.answer_text}</p>
+          {detail.assignmentQuestionType === "objective" ? (
+            <>
+              <p className="text-sm">
+                자동채점 결과:{" "}
+                <span
+                  className={`font-medium ${
+                    submission.is_correct === true
+                      ? "text-emerald-700"
+                      : submission.is_correct === false
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {submission.is_correct === true
+                    ? "정답"
+                    : submission.is_correct === false
+                      ? "오답"
+                      : "채점 불가"}
+                </span>
+              </p>
+              <div className="space-y-1 rounded-md border p-3 text-sm">
+                {(detail.objectiveOptions ?? []).map((option) => {
+                  const selected = (submission.selected_option_ids ?? []).includes(option.id);
+                  return (
+                    <p
+                      key={option.id}
+                      className={
+                        selected && option.is_correct
+                          ? "text-emerald-700"
+                          : selected && !option.is_correct
+                            ? "text-destructive"
+                            : "text-muted-foreground"
+                      }
+                    >
+                      {selected ? "선택" : "미선택"} / {option.is_correct ? "정답" : "오답"} - {option.option_text}
+                    </p>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{submission.answer_text}</p>
+          )}
           <p className="text-xs text-muted-foreground">
             제출 시간: {new Date(submission.submitted_at).toLocaleString("ko-KR")}
           </p>

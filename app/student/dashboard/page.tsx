@@ -1,13 +1,13 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/components/common/page-header";
-import { getAuthState } from "@/lib/auth/session";
+import { getGuestAuthState } from "@/lib/auth/guest-auth";
 import { getStudentDashboardStats } from "@/lib/student/queries";
 import { StatsCard } from "@/components/teacher/stats-card";
 
 export default async function StudentDashboardPage() {
-  const { user, profile } = await getAuthState();
-  if (!user || profile?.role !== "student") {
+  const { user, profile } = await getGuestAuthState();
+  if (!user || !profile) {
     throw new Error("권한이 없는 접근입니다.");
   }
 

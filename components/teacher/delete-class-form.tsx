@@ -2,15 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { deleteAssignment } from "@/actions/teacher";
+import { deleteClass } from "@/actions/teacher-classes";
 
-export function DeleteAssignmentForm({
-  assignmentId,
-  title,
+export function DeleteClassForm({
+  classId,
+  className,
   returnTo,
 }: {
-  assignmentId: string;
-  title?: string;
+  classId: string;
+  className: string;
   returnTo?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -18,9 +18,7 @@ export function DeleteAssignmentForm({
 
   useEffect(() => {
     if (!open) return;
-
     cancelButtonRef.current?.focus();
-
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
@@ -33,27 +31,27 @@ export function DeleteAssignmentForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-destructive/40 bg-destructive/10 px-3 text-sm font-medium text-destructive hover:bg-destructive/20 md:h-7 md:px-2.5 md:text-[0.8rem]"
+        className="inline-flex h-8 items-center rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20"
       >
         삭제
       </button>
       {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setOpen(false)}
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOpen(false)}>
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="delete-assignment-title"
+            aria-labelledby="delete-class-title"
             className="w-full max-w-sm rounded-lg border bg-background p-4 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <p id="delete-assignment-title" className="text-base font-semibold">
-              숙제를 삭제할까요?
+            <p id="delete-class-title" className="text-base font-semibold">
+              정말 삭제하시겠습니까?
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              {title ? `"${title}"` : "이 숙제"}를 삭제하면 복구할 수 없습니다.
+              &quot;{className}&quot; 반을 삭제하면 복구할 수 없습니다.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              반에 숙제가 남아 있으면 삭제할 수 없습니다.
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
@@ -65,8 +63,8 @@ export function DeleteAssignmentForm({
               >
                 취소
               </button>
-              <form action={deleteAssignment}>
-                <input type="hidden" name="assignmentId" value={assignmentId} />
+              <form action={deleteClass}>
+                <input type="hidden" name="classId" value={classId} />
                 {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
                 <button
                   type="submit"

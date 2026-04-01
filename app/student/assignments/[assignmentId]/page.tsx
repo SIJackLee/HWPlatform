@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/common/page-header";
 import { AnswerForm } from "@/components/student/answer-form";
 import { FeedbackHighlight } from "@/components/student/feedback-highlight";
-import { getAuthState } from "@/lib/auth/session";
+import { getGuestAuthState } from "@/lib/auth/guest-auth";
 import { getStudentAssignmentDetail } from "@/lib/student/queries";
 
 export default async function StudentAssignmentDetailPage({
@@ -16,9 +16,9 @@ export default async function StudentAssignmentDetailPage({
 }) {
   const { assignmentId } = await params;
   const query = await searchParams;
-  const { user, profile } = await getAuthState();
+  const { user, profile } = await getGuestAuthState();
 
-  if (!user || profile?.role !== "student") {
+  if (!user || !profile) {
     throw new Error("권한이 없는 접근입니다.");
   }
 
@@ -59,6 +59,26 @@ export default async function StudentAssignmentDetailPage({
         {assignment.question_type === "objective" && objectiveDetail ? (
           <p className="mt-2 whitespace-pre-wrap">
             <span className="font-medium">문항:</span> {objectiveDetail.prompt}
+          </p>
+        ) : null}
+        {assignment.question_type === "objective" && submission ? (
+          <p className="mt-2">
+            <span className="font-medium">자동채점:</span>{" "}
+            <span
+              className={
+                submission.is_correct === true
+                  ? "text-emerald-700"
+                  : submission.is_correct === false
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+              }
+            >
+              {submission.is_correct === true
+                ? "정답"
+                : submission.is_correct === false
+                  ? "오답"
+                  : "채점 대기"}
+            </span>
           </p>
         ) : null}
       </div>
