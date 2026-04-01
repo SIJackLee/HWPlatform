@@ -31,7 +31,7 @@ export function DeleteClassForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-8 items-center rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20"
+        className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md border border-destructive/40 bg-destructive/10 px-2 text-xs text-destructive hover:bg-destructive/20"
       >
         삭제
       </button>
@@ -56,7 +56,7 @@ export function DeleteClassForm({
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="inline-flex h-10 items-center justify-center rounded-md border px-3 text-sm font-medium"
+                className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-md border px-3 text-sm font-medium"
                 onClick={() => setOpen(false)}
                 ref={cancelButtonRef}
                 autoFocus
@@ -68,7 +68,7 @@ export function DeleteClassForm({
                 {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
                 <button
                   type="submit"
-                  className="inline-flex h-10 items-center justify-center rounded-md border border-destructive/50 bg-destructive px-3 text-sm font-medium text-white hover:bg-destructive/90"
+                  className="inline-flex h-10 items-center justify-center whitespace-nowrap rounded-md border border-destructive/50 bg-destructive px-3 text-sm font-medium text-white hover:bg-destructive/90"
                 >
                   삭제 확인
                 </button>

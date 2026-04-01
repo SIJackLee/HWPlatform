@@ -32,7 +32,7 @@ export function SubmissionTable({
   }
 
   const outlineSmClass =
-    "inline-flex h-11 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted md:h-7 md:px-2.5 md:text-[0.8rem]";
+    "inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted md:h-7 md:px-2.5 md:text-[0.8rem]";
 
   const renderAutoGradeText = (submission: SubmissionWithStudent) => {
     if (autoGradeMode === "single") {
@@ -74,7 +74,9 @@ export function SubmissionTable({
             {autoGradeMode ? (
               <p className="text-sm">
                 자동채점:{" "}
-                <span className={renderAutoGradeText(submission).className}>{renderAutoGradeText(submission).text}</span>
+                <span className={`whitespace-nowrap ${renderAutoGradeText(submission).className}`}>
+                  {renderAutoGradeText(submission).text}
+                </span>
               </p>
             ) : null}
             <p className="text-sm">피드백: {submission.feedback_text ? "작성됨" : "미작성"}</p>
@@ -107,7 +109,9 @@ export function SubmissionTable({
               <td className="px-4 py-3">{formatDate(submission.submitted_at)}</td>
               {autoGradeMode ? (
                 <td className="px-4 py-3">
-                  <span className={renderAutoGradeText(submission).className}>{renderAutoGradeText(submission).text}</span>
+                  <span className={`whitespace-nowrap ${renderAutoGradeText(submission).className}`}>
+                    {renderAutoGradeText(submission).text}
+                  </span>
                 </td>
               ) : null}
               <td className="px-4 py-3">{submission.feedback_text ? "작성됨" : "미작성"}</td>

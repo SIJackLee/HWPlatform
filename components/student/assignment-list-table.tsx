@@ -17,7 +17,7 @@ export function AssignmentListTable({ items }: { items: StudentAssignmentItem[] 
   }
 
   const outlineSmClass =
-    "inline-flex h-11 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted md:h-7 md:px-2.5 md:text-[0.8rem]";
+    "inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted md:h-7 md:px-2.5 md:text-[0.8rem]";
 
   return (
     <div className="overflow-hidden rounded-lg border">

@@ -53,7 +53,7 @@ export function LoginForm({ errorMessage }: { errorMessage?: string }) {
         <p className="text-xs text-muted-foreground">학생은 계정 로그인 대신 초대코드로 입장합니다.</p>
         <Link
           href="/join"
-          className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted"
+          className="mt-2 inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted"
         >
           학생 초대코드로 입장하기
         </Link>

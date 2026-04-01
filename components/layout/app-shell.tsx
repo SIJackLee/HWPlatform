@@ -16,9 +16,9 @@ export function AppShell({ title, navItems, subNavItems = [], actions, children 
   const pathname = usePathname();
   const homeHref = navItems[0]?.href ?? "/";
   const navLinkClass =
-    "inline-flex h-8 items-center justify-start rounded-lg px-2.5 text-sm font-medium hover:bg-muted hover:text-foreground";
+    "inline-flex h-8 items-center justify-start whitespace-nowrap rounded-lg px-2.5 text-sm font-medium hover:bg-muted hover:text-foreground";
   const mobileNavLinkClass =
-    "inline-flex h-11 flex-1 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted";
+    "inline-flex h-11 flex-1 shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted";
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -50,7 +50,7 @@ export function AppShell({ title, navItems, subNavItems = [], actions, children 
                         <Link
                           key={sub.href}
                           href={sub.href}
-                          className="inline-flex h-7 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="inline-flex h-7 items-center whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                           {sub.label}
                         </Link>
